@@ -1,0 +1,21 @@
+{
+  "faces": {
+    "C1": "faces/S1.webp",
+    "C11": "faces/C11.webp",
+    "C12": "faces/C12.webp",
+    "C13": "faces/C13.webp",
+    "D1": "faces/S1.webp",
+    "D11": "faces/D11.webp",
+    "D12": "faces/D12.webp",
+    "D13": "faces/D13.webp",
+    "H1": "faces/S1.webp",
+    "H11": "faces/H11.webp",
+    "H12": "faces/H12.webp",
+    "H13": "faces/H13.webp",
+    "S1": "faces/S1.webp",
+    "S11": "faces/S11.webp",
+    "S12": "faces/S12.webp",
+    "S13": "faces/S13.webp"
+  },
+  "back": "back.webp"
+}

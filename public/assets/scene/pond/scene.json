@@ -1,0 +1,301 @@
+{
+  "id": "pond",
+  "designSize": [
+    2560,
+    1600
+  ],
+  "overscan": 0.08,
+  "light": {
+    "pos": [
+      0.7484,
+      0.6813
+    ],
+    "color": [
+      1.0,
+      0.74,
+      0.42
+    ],
+    "intensity": 0.32
+  },
+  "defaultMood": "rainyEvening",
+  "win": "fireworks",
+  "layers": [
+    {
+      "id": "00-sky",
+      "src": "00-sky.webp",
+      "parallax": 0.0
+    },
+    {
+      "id": "01-far-trees",
+      "src": "01-far-trees.webp",
+      "parallax": 0.02,
+      "effects": [
+        "wind"
+      ],
+      "mask": "01-far-trees.wind.webp",
+      "intensity": 0.35
+    },
+    {
+      "id": "02-house",
+      "src": "02-house.webp",
+      "parallax": 0.04
+    },
+    {
+      "id": "03-mid-foliage",
+      "src": "03-mid-foliage.webp",
+      "parallax": 0.08,
+      "effects": [
+        "wind"
+      ],
+      "mask": "03-mid-foliage.wind.webp",
+      "intensity": 0.7
+    },
+    {
+      "id": "04-water",
+      "src": "04-water.webp",
+      "parallax": 0.1,
+      "effects": [
+        "water"
+      ],
+      "mask": "04-water.webp"
+    },
+    {
+      "id": "05-water-refl",
+      "src": "05-water-refl.webp",
+      "parallax": 0.1,
+      "effects": [
+        "water"
+      ],
+      "mask": "04-water.webp",
+      "intensity": 1.4
+    },
+    {
+      "id": "06-lilypads",
+      "src": "06-lilypads.webp",
+      "parallax": 0.14,
+      "effects": [
+        "water"
+      ],
+      "mask": "06-lilypads.webp",
+      "intensity": 0.4
+    },
+    {
+      "id": "08-flowers-left",
+      "src": "08-flowers-left.webp",
+      "parallax": 0.22,
+      "effects": [
+        "wind"
+      ],
+      "mask": "08-flowers-left.wind.webp",
+      "intensity": 1.0
+    },
+    {
+      "id": "09-leaves-right",
+      "src": "09-leaves-right.webp",
+      "parallax": 0.28,
+      "effects": [
+        "wind"
+      ],
+      "mask": "09-leaves-right.wind.webp",
+      "intensity": 1.2
+    },
+    {
+      "id": "10-table",
+      "src": "10-table.webp",
+      "parallax": 0.32
+    },
+    {
+      "id": "11-lantern",
+      "src": "11-lantern.webp",
+      "parallax": 0.34
+    },
+    {
+      "id": "13-glass",
+      "src": "13-glass.webp",
+      "parallax": 0.34
+    }
+  ],
+  "plannedLayers": [
+    {
+      "id": "00-sky",
+      "src": "00-sky.png",
+      "parallax": 0.0
+    },
+    {
+      "id": "01-far-trees",
+      "src": "01-far-trees.png",
+      "parallax": 0.02,
+      "effects": [
+        "wind"
+      ],
+      "mask": "01-far-trees.wind.png",
+      "intensity": 0.35
+    },
+    {
+      "id": "02-house",
+      "src": "02-house.png",
+      "parallax": 0.04
+    },
+    {
+      "id": "03-mid-foliage",
+      "src": "03-mid-foliage.png",
+      "parallax": 0.08,
+      "effects": [
+        "wind"
+      ],
+      "mask": "03-mid-foliage.wind.png",
+      "intensity": 0.7
+    },
+    {
+      "id": "04-water",
+      "src": "04-water.png",
+      "parallax": 0.1,
+      "effects": [
+        "water"
+      ],
+      "mask": "04-water.png"
+    },
+    {
+      "id": "05-water-refl",
+      "src": "05-water-refl.png",
+      "parallax": 0.1,
+      "effects": [
+        "water"
+      ],
+      "mask": "04-water.png",
+      "intensity": 1.4
+    },
+    {
+      "id": "06-lilypads",
+      "src": "06-lilypads.png",
+      "parallax": 0.14,
+      "effects": [
+        "water"
+      ],
+      "mask": "06-lilypads.png",
+      "intensity": 0.4
+    },
+    {
+      "id": "07-cat",
+      "src": "07-cat.png",
+      "parallax": 0.16
+    },
+    {
+      "id": "08-flowers-left",
+      "src": "08-flowers-left.png",
+      "parallax": 0.22,
+      "effects": [
+        "wind"
+      ],
+      "mask": "08-flowers-left.wind.png",
+      "intensity": 1.0
+    },
+    {
+      "id": "09-leaves-right",
+      "src": "09-leaves-right.png",
+      "parallax": 0.28,
+      "effects": [
+        "wind"
+      ],
+      "mask": "09-leaves-right.wind.png",
+      "intensity": 1.2
+    },
+    {
+      "id": "10-table",
+      "src": "10-table.png",
+      "parallax": 0.32
+    },
+    {
+      "id": "11-lantern",
+      "src": "11-lantern.png",
+      "parallax": 0.34
+    },
+    {
+      "id": "13-glass",
+      "src": "13-glass.png",
+      "parallax": 0.34
+    }
+  ],
+  "actors": [
+    {
+      "id": "flame",
+      "type": "flame",
+      "src": "lamp-flame-4x4.webp",
+      "anchor": [
+        1916,
+        1090
+      ],
+      "size": [
+        44,
+        52
+      ],
+      "parallax": 0.34,
+      "grid": [
+        4,
+        4
+      ],
+      "fps": 12,
+      "after": "11-lantern"
+    },
+    {
+      "id": "cat",
+      "type": "cat",
+      "src": "cat/cat-open.webp",
+      "blinkSrc": "cat/cat-blink.webp",
+      "anchor": [
+        1180,
+        980
+      ],
+      "size": [
+        205,
+        205
+      ],
+      "parallax": 0.16,
+      "waterline": 1002,
+      "diveDepth": 115,
+      "after": "06-lilypads"
+    },
+    {
+      "id": "radio",
+      "type": "radio",
+      "anchor": [
+        1461,
+        1288
+      ],
+      "size": [
+        300,
+        190
+      ],
+      "parallax": 0.32,
+      "after": "10-table",
+      "src": "tape-deck.webp",
+      "window": [
+        0.229,
+        0.214,
+        0.548,
+        0.235
+      ],
+      "keys": [
+        [
+          0.254,
+          0.691,
+          0.105,
+          0.066
+        ],
+        [
+          0.443,
+          0.691,
+          0.105,
+          0.066
+        ],
+        [
+          0.632,
+          0.691,
+          0.105,
+          0.064
+        ]
+      ],
+      "tint": 13948116
+    }
+  ]
+}

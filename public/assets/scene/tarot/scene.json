@@ -1,0 +1,208 @@
+{
+  "id": "tarot",
+  "designSize": [
+    2560,
+    1600
+  ],
+  "overscan": 0.08,
+  "light": {
+    "pos": [
+      0.161,
+      0.4375
+    ],
+    "color": [
+      1.0,
+      0.74,
+      0.42
+    ],
+    "intensity": 0.32
+  },
+  "defaultMood": "candles",
+  "win": "starfall",
+  "layers": [
+    {
+      "id": "00-sky",
+      "src": "00-sky.webp",
+      "parallax": 0.0
+    },
+    {
+      "id": "01-city",
+      "src": "01-city.webp",
+      "parallax": 0.02
+    },
+    {
+      "id": "02-wall",
+      "src": "02-wall.webp",
+      "parallax": 0.12,
+      "effects": [
+        "wind"
+      ],
+      "mask": "02-wall.wind.webp",
+      "intensity": 0.5
+    },
+    {
+      "id": "03-sill",
+      "src": "03-sill.webp",
+      "parallax": 0.05
+    },
+    {
+      "id": "04-plant",
+      "src": "04-plant.webp",
+      "parallax": 0.14,
+      "effects": [
+        "wind"
+      ],
+      "mask": "04-plant.wind.webp",
+      "intensity": 0.8
+    },
+    {
+      "id": "05-desk",
+      "src": "05-desk.webp",
+      "parallax": 0.22
+    },
+    {
+      "id": "06-items",
+      "src": "06-items.webp",
+      "parallax": 0.24
+    },
+    {
+      "id": "07-candle",
+      "src": "07-candle.webp",
+      "parallax": 0.3
+    }
+  ],
+  "plannedLayers": [
+    {
+      "id": "00-sky",
+      "src": "00-sky.png",
+      "parallax": 0.0
+    },
+    {
+      "id": "01-city",
+      "src": "01-city.png",
+      "parallax": 0.02
+    },
+    {
+      "id": "02-wall",
+      "src": "02-wall.png",
+      "parallax": 0.12,
+      "effects": [
+        "wind"
+      ],
+      "mask": "02-wall.wind.png",
+      "intensity": 0.5
+    },
+    {
+      "id": "03-sill",
+      "src": "03-sill.png",
+      "parallax": 0.05
+    },
+    {
+      "id": "04-plant",
+      "src": "04-plant.png",
+      "parallax": 0.14,
+      "effects": [
+        "wind"
+      ],
+      "mask": "04-plant.wind.png",
+      "intensity": 0.8
+    },
+    {
+      "id": "05-desk",
+      "src": "05-desk.png",
+      "parallax": 0.22
+    },
+    {
+      "id": "06-items",
+      "src": "06-items.png",
+      "parallax": 0.24
+    },
+    {
+      "id": "07-candle",
+      "src": "07-candle.png",
+      "parallax": 0.3
+    }
+  ],
+  "actors": [
+    {
+      "id": "flame",
+      "type": "flame",
+      "src": "lamp-flame-4x4.webp",
+      "anchor": [
+        412,
+        800
+      ],
+      "size": [
+        80,
+        185
+      ],
+      "parallax": 0.3,
+      "grid": [
+        4,
+        4
+      ],
+      "fps": 12,
+      "after": "07-candle"
+    },
+    {
+      "id": "cat",
+      "type": "cat",
+      "src": "cat.webp",
+      "anchor": [
+        1460,
+        971
+      ],
+      "size": [
+        165,
+        142
+      ],
+      "parallax": 0.22,
+      "waterline": 1012,
+      "diveDepth": 160,
+      "mirror": false,
+      "after": "05-desk"
+    },
+    {
+      "id": "radio",
+      "type": "radio",
+      "anchor": [
+        1290,
+        1270
+      ],
+      "size": [
+        340,
+        215
+      ],
+      "parallax": 0.24,
+      "after": "06-items",
+      "src": "tape-deck.webp",
+      "window": [
+        0.3,
+        0.35,
+        0.31,
+        0.28
+      ],
+      "keys": [
+        [
+          0.325,
+          0.735,
+          0.125,
+          0.11
+        ],
+        [
+          0.515,
+          0.685,
+          0.115,
+          0.115
+        ],
+        [
+          0.68,
+          0.635,
+          0.115,
+          0.12
+        ]
+      ],
+      "tint": 13948116
+    }
+  ]
+}

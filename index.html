@@ -1,0 +1,515 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+    <title>Cozy Spider</title>
+    <style>
+      :root {
+        --ink: #e6f0e6;
+        --ink-dim: #93a99b;
+        --panel: rgba(12, 24, 20, 0.62);
+        --edge: rgba(216, 201, 160, 0.16);
+      }
+
+      html, body {
+        margin: 0;
+        height: 100%;
+        background: #0d1512;
+        overflow: hidden;
+        font-family: Georgia, "Times New Roman", serif;
+        color: var(--ink);
+        -webkit-font-smoothing: antialiased;
+      }
+
+      #stage { position: fixed; inset: 0; touch-action: none; }
+
+      /* Заставка. Живёт прямо в HTML, чтобы появиться до загрузки JS:
+         после «Применить» страница перезагружается, и без неё игрок
+         смотрел бы в чёрный экран все секунды, пока едут слои сцены. */
+      #boot {
+        position: fixed;
+        inset: 0;
+        z-index: 99;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+        background: #0d1512;
+        transition: opacity 0.5s ease;
+      }
+      #boot.done { opacity: 0; pointer-events: none; }
+      #boot .bar {
+        width: min(240px, 60vw);
+        height: 3px;
+        border-radius: 2px;
+        overflow: hidden;
+        background: rgba(216, 201, 160, 0.14);
+      }
+      #boot .bar i {
+        display: block;
+        height: 100%;
+        width: 0;
+        border-radius: 2px;
+        background: #d8c9a0;
+        transition: width 0.25s ease;
+      }
+      /* Пока манифесты не прочитаны, прогресса ещё нет — полоска ходит
+         сама, чтобы страница не выглядела зависшей. */
+      #boot.idle .bar i {
+        width: 30%;
+        animation: boot-slide 1.3s ease-in-out infinite;
+      }
+      @keyframes boot-slide {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(340%); }
+      }
+      #boot span {
+        font-size: 13px;
+        letter-spacing: 0.06em;
+        color: var(--ink-dim);
+      }
+
+      /* HUD живёт над канвасом и намеренно не попадает в пост-обработку:
+         зерно и виньетка на цифрах читаются как грязь, а не как атмосфера. */
+      #hud {
+        position: fixed;
+        inset: 0;
+        z-index: 10;
+        pointer-events: none;
+      }
+
+      .hud-bar {
+        position: absolute;
+        left: 0; right: 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 14px;
+        box-sizing: border-box;
+        flex-wrap: wrap;
+      }
+      .hud-top { top: 0; }
+
+      .hud-group {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        pointer-events: auto;
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: 12px;
+        padding: 6px 10px;
+        backdrop-filter: blur(8px);
+      }
+
+      .hud-title {
+        font-size: 19px;
+        letter-spacing: 0.04em;
+        padding-right: 4px;
+      }
+
+      .hud-suits {
+        font-size: 12px;
+        color: var(--ink-dim);
+        display: flex;
+        align-items: center;
+        gap: 6px;
+      }
+
+      /* Сегментный переключатель вместо нативного селекта: системный
+         дропдаун с синей подсветкой ломал стиль сцены. */
+      .hud-seg {
+        display: flex;
+        gap: 3px;
+      }
+      .hud-seg button {
+        padding: 3px 9px;
+        font-size: 12px;
+        border-radius: 7px;
+        color: var(--ink-dim);
+      }
+      .hud-seg button.on {
+        color: var(--ink);
+        background: rgba(216, 201, 160, 0.18);
+        border-color: rgba(216, 201, 160, 0.42);
+      }
+
+      .hud-stats { gap: 18px; }
+      .hud-stats span { display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
+      .hud-stats b { font-size: 17px; font-weight: 600; }
+      .hud-stats i { font-size: 10px; font-style: normal; color: var(--ink-dim); letter-spacing: 0.06em; }
+
+      button {
+        font: inherit;
+        font-size: 13px;
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--edge);
+        border-radius: 8px;
+        padding: 6px 11px;
+        cursor: pointer;
+        transition: background 140ms ease, opacity 140ms ease;
+      }
+      button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.13); }
+      button:disabled { opacity: 0.35; cursor: default; }
+
+      .hud-toast {
+        position: absolute;
+        left: 50%;
+        top: 96px;
+        transform: translate(-50%, -8px);
+        padding: 10px 18px;
+        border-radius: 12px;
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        backdrop-filter: blur(8px);
+        font-size: 15px;
+        opacity: 0;
+        transition: opacity 220ms ease, transform 220ms ease;
+      }
+      .hud-toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+      /* Лавка. Тот же язык, что у HUD: полупрозрачные панели, тёплый кант. */
+      .shop-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 20;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(6, 12, 10, 0.55);
+        backdrop-filter: blur(3px);
+        pointer-events: auto;
+      }
+      .shop-overlay.show { display: flex; }
+      /* Профиль и почта открываются С титульника (z 30) — им выше. */
+      .shop-overlay.over-start { z-index: 40; }
+
+      .shop-panel {
+        width: min(680px, calc(100vw - 32px));
+        max-height: calc(100vh - 64px);
+        overflow-y: auto;
+        background: rgba(14, 26, 22, 0.92);
+        border: 1px solid var(--edge);
+        border-radius: 16px;
+        padding: 18px 20px;
+        box-sizing: border-box;
+      }
+
+      .shop-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 14px;
+      }
+      .shop-title { font-size: 21px; letter-spacing: 0.04em; }
+      .shop-close { padding: 4px 10px; }
+
+      .shop-list {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+        gap: 12px;
+      }
+
+      .shop-card {
+        display: flex;
+        flex-direction: column;
+        gap: 6px;
+        background: rgba(255, 255, 255, 0.045);
+        border: 1px solid var(--edge);
+        border-radius: 12px;
+        padding: 12px;
+      }
+      .shop-card-top {
+        display: flex;
+        justify-content: space-between;
+        font-size: 11px;
+        color: var(--ink-dim);
+        letter-spacing: 0.06em;
+      }
+      .shop-price { color: #d8c9a0; }
+      .shop-card b { font-size: 15px; }
+      .shop-card p { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-dim); flex: 1; }
+      .shop-card button { margin-top: 6px; }
+      .shop-card .shop-noted { opacity: 1; color: #a9c7b2; }
+
+      .shop-note {
+        margin-top: 14px;
+        font-size: 11px;
+        color: var(--ink-dim);
+        text-align: center;
+      }
+      .shop-note a { color: inherit; }
+      .shop-note a:hover { color: var(--ink); }
+
+      /* Титульный экран. Сцена живёт позади и просвечивает: она и есть
+         заставка. Панель — тот же язык, что HUD и лавка. */
+      /* Тёплая вспышка в момент веера карт: чистый CSS, ломаться нечему. */
+      .win-flash {
+        position: fixed;
+        inset: 0;
+        z-index: 4;
+        pointer-events: none;
+        background: radial-gradient(ellipse at 50% 42%,
+          rgba(255, 214, 140, 0.55), rgba(255, 214, 140, 0.18) 45%, transparent 75%);
+        animation: win-flash 2.5s ease-out forwards;
+      }
+      @keyframes win-flash {
+        0% { opacity: 0; }
+        22% { opacity: 1; }
+        100% { opacity: 0; }
+      }
+
+      /* Плашка победы: поверх финального эффекта, в стиле стартовой панели. */
+      .win-plaque {
+        position: fixed;
+        left: 50%;
+        top: 38%;
+        transform: translate(-50%, -50%) scale(0.94);
+        z-index: 30;
+        padding: 22px 34px;
+        text-align: center;
+        background: var(--panel);
+        border: 1px solid var(--edge);
+        border-radius: 16px;
+        backdrop-filter: blur(6px);
+        opacity: 0;
+        transition: opacity 0.45s ease, transform 0.45s ease;
+        pointer-events: none;
+      }
+      .win-plaque.show {
+        opacity: 1;
+        transform: translate(-50%, -50%) scale(1);
+        pointer-events: auto;
+      }
+      .win-plaque-title { font-size: 30px; letter-spacing: 0.05em; }
+      .win-plaque-sub {
+        font-size: 13px;
+        color: var(--ink-dim);
+        margin: 4px 0 14px;
+      }
+      .win-plaque-row { display: flex; gap: 10px; justify-content: center; }
+      .win-plaque button { padding: 8px 16px; font-size: 14px; }
+
+      .start-overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 30;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: rgba(6, 12, 10, 0.42);
+        pointer-events: auto;
+      }
+      .start-overlay.show { display: flex; }
+
+      .start-panel {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        width: min(360px, calc(100vw - 48px));
+        background: rgba(14, 26, 22, 0.88);
+        border: 1px solid var(--edge);
+        border-radius: 18px;
+        padding: 30px 28px 22px;
+        box-sizing: border-box;
+        backdrop-filter: blur(6px);
+        text-align: center;
+      }
+
+      .start-title { font-size: 42px; letter-spacing: 0.06em; }
+      .start-sub { font-size: 13px; color: var(--ink-dim); margin-bottom: 12px; }
+
+      .start-play {
+        font-size: 17px;
+        padding: 10px 46px;
+        border-radius: 12px;
+        background: rgba(216, 201, 160, 0.14);
+        border-color: rgba(216, 201, 160, 0.38);
+      }
+      .start-play:hover { background: rgba(216, 201, 160, 0.24); }
+
+      .start-shop {
+        margin-top: 8px;
+        font-size: 12px;
+        padding: 6px 18px;
+        border-radius: 10px;
+        color: var(--ink-dim);
+      }
+      .start-shop:hover { color: var(--ink); }
+
+      .start-account {
+        margin-top: 16px;
+        padding-top: 14px;
+        border-top: 1px solid var(--edge);
+        width: 100%;
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: center;
+      }
+      .start-account-head { font-size: 10px; letter-spacing: 0.14em; color: var(--ink-dim); text-transform: uppercase; }
+      .start-user { font-size: 13px; }
+      .start-providers { display: flex; gap: 8px; }
+      .start-note { font-size: 11px; color: var(--ink-dim); line-height: 1.45; }
+      .start-resend {
+        font-size: 11px;
+        padding: 3px 12px;
+        color: var(--ink-dim);
+        background: none;
+        border-color: transparent;
+      }
+      .start-resend:hover { color: var(--ink); border-color: var(--edge); }
+      .start-legal { font-size: 10px; color: var(--ink-dim); }
+      .start-legal a { color: inherit; }
+      a.start-legal:hover, .start-legal a:hover { color: var(--ink); }
+
+      /* Кнопка-визитка вошедшего: аватар + имя, клик открывает профиль. */
+      .start-me {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 5px 16px 5px 6px;
+        border-radius: 999px;
+        font-size: 14px;
+      }
+      .start-me[hidden] { display: none; }
+      .start-me-avatar,
+      .acct-avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: rgba(216, 201, 160, 0.14);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        flex: none;
+        font-size: 14px;
+      }
+      .start-me-avatar img,
+      .acct-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+      /* Профиль: та же панель, что у лавки, свои внутренности. */
+      .acct-panel { width: min(400px, calc(100vw - 48px)); }
+      .acct-id { display: flex; align-items: center; gap: 14px; margin: 4px 0 16px; }
+      .acct-avatar { width: 56px; height: 56px; font-size: 24px; }
+      .acct-name { font-size: 16px; margin-bottom: 7px; }
+      .acct-avatar-btn {
+        font-size: 11px;
+        color: var(--ink-dim);
+        border: 1px solid var(--edge);
+        border-radius: 8px;
+        padding: 3px 10px;
+        cursor: pointer;
+      }
+      .acct-avatar-btn:hover { color: var(--ink); background: rgba(255, 255, 255, 0.06); }
+      .acct-sub {
+        font-size: 10px;
+        letter-spacing: 0.14em;
+        color: var(--ink-dim);
+        text-transform: uppercase;
+        margin-bottom: 8px;
+      }
+      .acct-owned { display: flex; flex-direction: column; gap: 5px; margin-bottom: 16px; }
+      .acct-sku {
+        display: flex;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 13px;
+        color: var(--ink-dim);
+        border: 1px solid var(--edge);
+        border-radius: 8px;
+        padding: 6px 11px;
+      }
+      .acct-sku-owned { color: var(--ink); }
+      .acct-sku-owned span:last-child { color: #a9c7b2; }
+      .acct-actions { display: flex; justify-content: space-between; gap: 8px; }
+      .acct-signout { color: var(--ink-dim); }
+
+      /* Плашка регистрации по почте. */
+      .mail-panel { width: min(340px, calc(100vw - 48px)); }
+      .mail-form { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 2px; }
+      .mail-form[hidden] { display: none; }
+      .mail-actions { display: flex; gap: 8px; }
+      .mail-actions button { flex: 1; }
+      .mail-forgot {
+        align-self: center;
+        font-size: 11px;
+        padding: 2px 10px;
+        color: var(--ink-dim);
+        background: none;
+        border-color: transparent;
+      }
+      .mail-forgot:hover { color: var(--ink); border-color: var(--edge); }
+      .mail-form input {
+        flex: 1;
+        min-width: 0;
+        font: inherit;
+        font-size: 13px;
+        color: var(--ink);
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid var(--edge);
+        border-radius: 8px;
+        padding: 6px 11px;
+        outline: none;
+      }
+      .mail-form input:focus { border-color: rgba(216, 201, 160, 0.38); }
+      .mail-form input::placeholder { color: var(--ink-dim); }
+      .start-note-active { color: #a9c7b2; }
+
+      #debug {
+        position: fixed;
+        left: 12px;
+        bottom: 12px;
+        z-index: 11;
+        font: 12px/1.5 ui-monospace, monospace;
+        color: #cfe3d8;
+        background: rgba(10, 20, 16, 0.62);
+        padding: 8px 10px;
+        border-radius: 8px;
+        backdrop-filter: blur(6px);
+        pointer-events: none;
+        white-space: pre;
+        display: none;
+      }
+      #debug.show { display: block; }
+
+      @media (max-width: 720px) {
+        .hud-title { display: none; }
+        .hud-bar { padding: 6px 8px; gap: 6px; }
+        .hud-group { padding: 4px 8px; border-radius: 10px; }
+        .hud-stats { gap: 12px; }
+        button { padding: 5px 8px; font-size: 12px; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="stage"></div>
+    <div id="hud"></div>
+    <div id="debug"></div>
+    <div id="boot" class="idle">
+      <div class="bar"><i></i></div>
+      <span>тасуем колоду…</span>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+
+    <!-- Yandex.Metrika counter -->
+    <script type="text/javascript">
+        (function(m,e,t,r,i,k,a){
+            m[i]=m[i]||function(){(m[i].a=m[i].a||[]).push(arguments)};
+            m[i].l=1*new Date();
+            for (var j = 0; j < document.scripts.length; j++) {if (document.scripts[j].src === r) { return; }}
+            k=e.createElement(t),a=e.getElementsByTagName(t)[0],k.async=1,k.src=r,a.parentNode.insertBefore(k,a)
+        })(window, document,'script','https://mc.yandex.ru/metrika/tag.js?id=112115281', 'ym');
+
+        ym(112115281, 'init', {ssr:true, webvisor:true, clickmap:true, ecommerce:"dataLayer", referrer: document.referrer, url: location.href, accurateTrackBounce:true, trackLinks:true});
+    </script>
+    <noscript><div><img src="https://mc.yandex.ru/watch/112115281" style="position:absolute; left:-9999px;" alt="" /></div></noscript>
+    <!-- /Yandex.Metrika counter -->
+  </body>
+</html>

@@ -1,0 +1,17 @@
+_snapshots/
+layers/
+holes/
+masks/
+source.png
+tape-deck.png
+deck/faces/*.png
+deck/back.png
+deck-tarot/faces/*.png
+deck-tarot/back.png
+scene/tarot/*.png
+scene/pond/_water-mask-preview.png
+_to-gpu-pc/
+_to-gpu-pc-2/
+_to-gpu-pc-3/
+_to-gpu-tape2/
+*.zip

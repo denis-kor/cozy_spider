@@ -1,0 +1,14 @@
+node_modules/
+dist/
+dist-assets/
+.vite/
+*.local
+.DS_Store
+
+# локальный мусор в корне: обменные архивы и случайные картинки
+/tarot/
+/*.zip
+/*.rar
+/*.png
+/*.jpg
+__pycache__/
