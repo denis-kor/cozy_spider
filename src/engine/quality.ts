@@ -27,9 +27,13 @@ export interface TierSettings {
   ambientFps: number
 }
 
+// Аберрация выключена на всех тирах. Маска карт гасит сдвиг каналов НА
+// карте, но фоновые пиксели у её края всё равно семплируют R/B внутрь
+// светлой бумаги — вокруг карт шла красно-синяя кайма, у крайних колонок
+// (r2 растёт к краям кадра) особенно грубая. Дефект дороже атмосферы.
 export const TIERS: Record<QualityTier, TierSettings> = {
-  ultra:  { postResolution: 1.0, rain: 1.0, dust: 1.0, grain: 0.035, aberration: 2.5, water: true,  wind: true,  ambientFps: 60 },
-  high:   { postResolution: 1.0, rain: 1.0, dust: 0.7, grain: 0.030, aberration: 1.8, water: true,  wind: true,  ambientFps: 60 },
+  ultra:  { postResolution: 1.0, rain: 1.0, dust: 1.0, grain: 0.035, aberration: 0.0, water: true,  wind: true,  ambientFps: 60 },
+  high:   { postResolution: 1.0, rain: 1.0, dust: 0.7, grain: 0.030, aberration: 0.0, water: true,  wind: true,  ambientFps: 60 },
   medium: { postResolution: 1.0, rain: 0.7, dust: 0.0, grain: 0.025, aberration: 0.0, water: true,  wind: false, ambientFps: 30 },
   low:    { postResolution: 1.0, rain: 0.0, dust: 0.0, grain: 0.020, aberration: 0.0, water: false, wind: false, ambientFps: 30 },
 }

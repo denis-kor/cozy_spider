@@ -35,7 +35,8 @@ export class AtmosphereFilter extends Filter {
       uDust: { value: 0.2, type: 'f32' },
       uVignette: { value: 0.42, type: 'f32' },
       uGrain: { value: 0.035, type: 'f32' },
-      uAberration: { value: 2.5, type: 'f32' },
+      // 0 — см. комментарий у TIERS: сдвиг каналов красил края карт.
+      uAberration: { value: 0, type: 'f32' },
       uExposure: { value: 1.0, type: 'f32' },
     })
 
