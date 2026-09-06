@@ -29,7 +29,7 @@ const MAIL_NOTE = 'Аккаунт восстановит прогресс и п�
 export function mountStart(
   root: HTMLElement,
   adapter: PlatformAdapter,
-  opts: { onAccount(): void; onShop(): void },
+  opts: { onAccount(): void; onShop(): void; onPlay?(): void },
 ): StartScreen {
   const overlay = document.createElement('div')
   overlay.className = 'start-overlay'
@@ -250,6 +250,7 @@ export function mountStart(
   ;(overlay.querySelector('[data-play]') as HTMLButtonElement).onclick = () => {
     track('start_play')
     overlay.classList.remove('show')
+    opts.onPlay?.()
   }
 
   // Лавка доступна с порога: гость (и модерация кассы) видит товары и

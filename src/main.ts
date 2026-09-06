@@ -102,7 +102,9 @@ async function main(): Promise<void> {
   }
 
   mountHud(stage, hud, { onShop: () => shop?.open(), onMenu: () => start?.open() })
-  shop = mountShop(hud, platform)
+  // Кнопка «Войти и купить» в лавке закрывает витрину и открывает
+  // титульник — там и живёт вход в аккаунт.
+  shop = mountShop(hud, platform, { onSignIn: () => start?.open() })
   account = mountAccount(hud, platform, {
     onShop: () => shop?.open(),
     // После выхода титульник должен показать гостя, а не старое имя.
@@ -111,6 +113,9 @@ async function main(): Promise<void> {
   start = mountStart(hud, platform, {
     onAccount: () => account?.open(),
     onShop: () => shop?.open(),
+    // Полминуты приглашающего мигания «пуска» на кассетнике — от входа в
+    // игру, а не от загрузки: сцена живёт и за титульником.
+    onPlay: () => stage.radio?.beginAttract(),
   })
   mountRadio(stage)
 

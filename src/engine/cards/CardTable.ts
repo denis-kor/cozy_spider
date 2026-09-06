@@ -246,7 +246,7 @@ export class CardTable {
     const topBar = Math.max(58, height * 0.088)
     // Низ приподнят под укрупнённый лоток: запас должен читаться как
     // «ещё пять раздач», а не как мусор в углу (фидбек тестеров).
-    const bottomBar = Math.max(64, height * 0.115)
+    const bottomBar = Math.max(96, height * 0.16)
 
     const usable = width - sideMargin * 2 - gap * (COLUMNS - 1)
     const cardW = Math.max(MIN_CARD_W, usable / COLUMNS)
@@ -286,6 +286,11 @@ export class CardTable {
 
     const trayY = height - bottomBar * 0.5
 
+    // Карта лотка считается ОТ высоты лотка, а не долей игровой карты:
+    // доля на высоких экранах вылезала за нижний край, и тестеры видели
+    // обрезанные «слишком маленькие карты в углу».
+    const trayCardW = Math.min(cardW, (bottomBar - 12) / CARD_ASPECT)
+
     return {
       cardW,
       cardH,
@@ -297,12 +302,12 @@ export class CardTable {
       boardW,
       topBar,
       bottomBar,
-      trayCardW: cardW * 0.66,
-      stockX: originX + boardW - cardW / 2 - cardW * 0.25,
+      trayCardW,
+      stockX: originX + boardW - cardW / 2 - trayCardW * 0.3,
       stockY: trayY,
-      foundationX: originX + cardW * 0.25,
+      foundationX: originX + trayCardW * 0.35,
       foundationY: trayY,
-      foundationStep: cardW * 0.3,
+      foundationStep: trayCardW * 0.45,
     }
   }
 
@@ -312,7 +317,9 @@ export class CardTable {
     const x = l.originX - l.cardW / 2 - pad
     const y = l.originY - l.cardH / 2 - pad
     const w = l.boardW + pad * 2
-    const h = this.viewH - l.bottomBar * 0.15 - y
+    // Нижний край уводится ЗА экран: раньше обводка скрима проходила по
+    // картам лотка и читалась как непонятная полоска (фидбек тестеров).
+    const h = this.viewH + pad - y
 
     // Подложка. Не украшение: без неё карты теряются на детализированном
     // фоне, а иллюстрация начинает спорить с игровым полем.
@@ -774,8 +781,51 @@ export class CardTable {
     this.sync(false)
   }
 
+  /**
+   * Лучший ход + подсветка на столе: что взять и куда положить.
+   *
+   * Сначала вспыхивает переносимая стопка, с небольшим отставанием —
+   * карта-цель: задержка и рисует направление «отсюда — туда». Один тост
+   * с номерами колонок тестеры расшифровать не могли.
+   */
   hint(): Move | null {
-    return bestMove(this.game.state)
+    const move = bestMove(this.game.state)
+    if (move?.t === 'move') {
+      const from = this.game.state.tableau[move.from]
+      for (const card of from.slice(from.length - move.count)) {
+        this.views.get(card.id)?.flash(this.tweener)
+      }
+      const to = this.game.state.tableau[move.to]
+      const target = to[to.length - 1]
+      if (target) this.views.get(target.id)?.flash(this.tweener, 0.4)
+      else this.flashSlot(move.to)
+    }
+    return move
+  }
+
+  /** Ход в пустую колонку: карты-цели нет, вспыхивает сам слот. */
+  private flashSlot(column: number): void {
+    const l = this.layout
+    const g = new Graphics()
+    g.roundRect(-l.cardW / 2, -l.cardH / 2, l.cardW, l.cardH, l.cardW * 0.075)
+      .fill({ color: 0xffd68c, alpha: 0.3 })
+      .stroke({ color: 0xffe0a0, width: Math.max(3, l.cardW * 0.07), alpha: 1 })
+    g.blendMode = 'add'
+    g.alpha = 0
+    g.position.set(l.originX + column * l.columnStep, l.originY)
+    this.dragLayer.addChild(g)
+
+    const fade = (up: boolean, left: number): void =>
+      this.tweener.to(g, { alpha: up ? 1 : 0 }, {
+        duration: up ? 0.22 : 0.38,
+        delay: up && left === 2 ? 0.4 : 0,
+        onDone: () => {
+          if (up) fade(false, left)
+          else if (left > 1) fade(true, left - 1)
+          else if (!g.destroyed) g.destroy()
+        },
+      })
+    fade(true, 2)
   }
 
   update(dt: number): void {

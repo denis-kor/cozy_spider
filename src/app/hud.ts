@@ -113,7 +113,7 @@ export function mountHud(stage: Stage, root: HTMLElement, hooks: HudHooks = {}):
 
   q<HTMLButtonElement>('[data-hint]').onclick = () => {
     const move = stage.table.hint()
-    if (move?.t === 'move') say(`Колонка ${move.from + 1} → ${move.to + 1}`)
+    if (move?.t === 'move') say(`Подсвечено: колонка ${move.from + 1} → ${move.to + 1}`)
     else if (move?.t === 'deal') say('Полезных ходов нет — раздайте из запаса')
     else say('Полезных ходов не видно')
   }

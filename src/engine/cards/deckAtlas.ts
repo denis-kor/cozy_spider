@@ -70,8 +70,11 @@ export const CARD_ASPECT = 1.45
 
 const PAPER = 0xf3ecdb
 const PAPER_EDGE = 0xd9cdb2
-const INK = 0x27302e
-const RED = 0xa8382f
+const INK = 0x232b28
+// Красный заметно ярче чернил. Прежний 0xa8382f на состаренной бумаге
+// сливался с тёмно-зелёным INK в общий бурый: в стопке, где видна лишь
+// верхняя полоска карты, цвет масти не читался (фидбек тестеров).
+const RED = 0xc63c2a
 
 const BACK_FIELD = 0x1f3b3a
 const BACK_LINE = 0x8fae9c
@@ -244,12 +247,17 @@ function drawCorner(
 }
 
 /**
- * Лицо карты с иллюстрацией во весь формат.
+ * Лицо карты с иллюстрацией.
  *
- * Картинка кладётся по принципу cover — заполняет карту целиком, лишнее
+ * Картинка кладётся по принципу cover — заполняет окно целиком, лишнее
  * срезается маской. Вписывание по contain оставляло бы поля разной ширины
  * на картинках разных пропорций, и колода перестала бы читаться как одна
  * колода.
+ *
+ * Окно — то же поле, что у рубашки (buildBack): бумажный кант по краю,
+ * арт внутри. Раньше иллюстрация шла в самый край карты, и рамки фигурных
+ * не совпадали с кремовым кантом числовых — колода разваливалась на две
+ * (фидбек тестеров).
  *
  * Пипсы при этом не рисуются вовсе. Десять чёрных значков поверх пейзажа —
  * это не «карта с картинкой», а картинка, испорченная значками. Ранг
@@ -258,16 +266,20 @@ function drawCorner(
  */
 function drawArtFace(parent: Container, art: Texture, w: number, h: number): void {
   const radius = w * 0.075
+  const fx = w * 0.035
+  const fy = h * 0.024
+  const fw = w * 0.93
+  const fh = h * 0.952
 
   const sprite = new Sprite(art)
-  const scale = Math.max(w / art.width, h / art.height)
+  const scale = Math.max(fw / art.width, fh / art.height)
   sprite.width = art.width * scale
   sprite.height = art.height * scale
   sprite.anchor.set(0.5)
-  sprite.position.set(w / 2, h / 2)
+  sprite.position.set(fx + fw / 2, fy + fh / 2)
 
   const clip = new Graphics()
-  clip.roundRect(0, 0, w, h, radius).fill({ color: 0xffffff })
+  clip.roundRect(fx, fy, fw, fh, radius * 0.8).fill({ color: 0xffffff })
   sprite.mask = clip
 
   parent.addChild(clip, sprite)

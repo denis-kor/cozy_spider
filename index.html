@@ -106,13 +106,13 @@
       }
 
       .hud-title {
-        font-size: 19px;
+        font-size: 22px;
         letter-spacing: 0.04em;
         padding-right: 4px;
       }
 
       .hud-suits {
-        font-size: 12px;
+        font-size: 14px;
         color: var(--ink-dim);
         display: flex;
         align-items: center;
@@ -126,8 +126,8 @@
         gap: 3px;
       }
       .hud-seg button {
-        padding: 3px 9px;
-        font-size: 12px;
+        padding: 4px 10px;
+        font-size: 14px;
         border-radius: 7px;
         color: var(--ink-dim);
       }
@@ -139,12 +139,14 @@
 
       .hud-stats { gap: 18px; }
       .hud-stats span { display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
-      .hud-stats b { font-size: 17px; font-weight: 600; }
-      .hud-stats i { font-size: 10px; font-style: normal; color: var(--ink-dim); letter-spacing: 0.06em; }
+      .hud-stats b { font-size: 20px; font-weight: 600; }
+      .hud-stats i { font-size: 12px; font-style: normal; color: var(--ink-dim); letter-spacing: 0.06em; }
 
+      /* Кегли на ступень крупнее исходных: «на моём экране не видно»
+         (фидбек тестеров). */
       button {
         font: inherit;
-        font-size: 13px;
+        font-size: 15px;
         color: var(--ink);
         background: rgba(255, 255, 255, 0.06);
         border: 1px solid var(--edge);
@@ -166,7 +168,7 @@
         background: var(--panel);
         border: 1px solid var(--edge);
         backdrop-filter: blur(8px);
-        font-size: 15px;
+        font-size: 18px;
         opacity: 0;
         transition: opacity 220ms ease, transform 220ms ease;
       }
@@ -484,7 +486,7 @@
         .hud-bar { padding: 6px 8px; gap: 6px; }
         .hud-group { padding: 4px 8px; border-radius: 10px; }
         .hud-stats { gap: 12px; }
-        button { padding: 5px 8px; font-size: 12px; }
+        button { padding: 5px 8px; font-size: 13px; }
       }
     </style>
   </head>

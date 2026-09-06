@@ -35,7 +35,12 @@ export interface Shop {
   open(): void
 }
 
-export function mountShop(root: HTMLElement, adapter: PlatformAdapter): Shop {
+export interface ShopHooks {
+  /** Открыть вход в аккаунт (титульник). Кнопка «войдите» ведёт сюда сама. */
+  onSignIn?: () => void
+}
+
+export function mountShop(root: HTMLElement, adapter: PlatformAdapter, hooks: ShopHooks = {}): Shop {
   // `over-start`: лавку можно открыть и с титульного экрана — она обязана
   // лечь поверх него, а не под (z-index 40 против 30, см. index.html).
   const overlay = document.createElement('div')
@@ -105,9 +110,14 @@ export function mountShop(root: HTMLElement, adapter: PlatformAdapter): Shop {
             action.classList.add('shop-noted')
           } else if (result.status === 'signin-required') {
             // Покупка живёт в аккаунте — иначе её не перенести на другое
-            // устройство и не вернуть после чистки браузера.
-            action.textContent = 'Сначала войдите — кнопка «Меню»'
+            // устройство и не вернуть после чистки браузера. Кнопка сама
+            // ведёт ко входу: «идите в меню» тестеры читали как тупик.
+            action.textContent = 'Войти и купить'
             action.disabled = false
+            action.onclick = () => {
+              close()
+              hooks.onSignIn?.()
+            }
           } else if (result.status === 'ok') {
             action.textContent = 'В игре'
           } else {

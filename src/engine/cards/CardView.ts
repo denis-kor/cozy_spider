@@ -1,4 +1,4 @@
-import { Container, Sprite, type Texture } from 'pixi.js'
+import { Container, Graphics, Sprite, type Texture } from 'pixi.js'
 
 import type { Card } from '../../core/types'
 import { Tweener, easing } from '../anim'
@@ -22,6 +22,7 @@ export class CardView {
 
   private lift = 0
   private destroyed = false
+  private flashG: Graphics | null = null
 
   constructor(
     readonly card: Card,
@@ -82,6 +83,49 @@ export class CardView {
     this.root.scale.set(1 + value * 0.06)
   }
 
+  /**
+   * Пульс подсказки: тёплая рамка вспыхивает дважды и убирает себя сама.
+   *
+   * Подсказка обязана показывать ОБЕ стороны хода прямо на столе — тост
+   * «колонка 3 → 7» тестеры не понимали. Цвет — от лампы (LED_ON семьи),
+   * чтобы вспышка читалась как блик света, а не чужой UI.
+   */
+  flash(tweener: Tweener, delay = 0): void {
+    this.clearFlash(tweener)
+    const w = this.face.width
+    const h = this.face.height
+    const g = new Graphics()
+    g.roundRect(-w / 2, -h / 2, w, h, w * 0.075)
+      .fill({ color: 0xffd68c, alpha: 0.3 })
+      .stroke({ color: 0xffe0a0, width: Math.max(3, w * 0.07), alpha: 1 })
+    g.blendMode = 'add'
+    g.alpha = 0
+    this.root.addChild(g)
+    this.flashG = g
+
+    const pulse = (left: number): void => {
+      tweener.to(g, { alpha: 1 }, {
+        duration: 0.22,
+        delay: left === 2 ? delay : 0,
+        ease: easing.outCubic,
+        onDone: () =>
+          tweener.to(g, { alpha: 0 }, {
+            duration: 0.38,
+            ease: easing.outCubic,
+            onDone: () => (left > 1 ? pulse(left - 1) : this.clearFlash(tweener)),
+          }),
+      })
+    }
+    pulse(2)
+  }
+
+  private clearFlash(tweener: Tweener): void {
+    if (!this.flashG) return
+    tweener.kill(this.flashG)
+    if (!this.flashG.destroyed) this.flashG.destroy()
+    this.flashG = null
+  }
+
   /** Наклон по вектору скорости — карта «сопротивляется» рывку. */
   setTilt(vx: number, vy: number): void {
     this.root.rotation = Math.max(-0.13, Math.min(0.13, vx * 0.0016))
@@ -120,6 +164,7 @@ export class CardView {
   kill(tweener: Tweener): void {
     tweener.kill(this.root)
     tweener.kill(this.face.skew)
+    this.clearFlash(tweener)
   }
 
   destroy(): void {

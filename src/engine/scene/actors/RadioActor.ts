@@ -62,6 +62,7 @@ export class RadioActor {
   private readonly body = new Graphics()
   private readonly reels = new Graphics()
   private readonly led = new Graphics()
+  private readonly glow = new Graphics()
   private readonly label: Text
   private readonly buttons: Button[] = []
   private readonly art?: Sprite
@@ -69,6 +70,27 @@ export class RadioActor {
   private spin = 0
   private baseW = 0
   private baseH = 0
+
+  /**
+   * Приглашающее мигание клавиши включения.
+   *
+   * Тестеры не находили музыку: кассетник читается как декорация. Первые
+   * полминуты ПАРТИИ клавиша «пуск» мягко пульсирует светом лампы; любое
+   * нажатие на кассетник — сигнал «понял, где музыка» — гасит подсказку
+   * навсегда. Отсчёт запускает beginAttract() по кнопке «Играть»: сцена
+   * живёт и за титульником, и стартуй таймер с загрузки — он истекал бы,
+   * пока игрок ещё смотрит на титул.
+   */
+  private attract = false
+  private attractT = 0
+  private discovered = false
+
+  /** Игрок вошёл в игру — пора подсказать, где музыка. */
+  beginAttract(): void {
+    if (this.discovered) return
+    this.attract = true
+    this.attractT = 0
+  }
 
   constructor(
     readonly spec: ActorSpec,
@@ -108,9 +130,15 @@ export class RadioActor {
     this.reels.visible = false
     this.label.visible = false
 
+    this.glow.blendMode = 'add'
+    this.glow.visible = false
+
     for (const id of ['prev', 'toggle', 'next'] as RadioCommand[]) {
       const root = new Container()
       const face = new Graphics()
+      // Подсветка лежит ПОД значком, но в контейнере клавиши: проседает
+      // вместе с ней при нажатии.
+      if (id === 'toggle') root.addChild(this.glow)
       root.addChild(face)
       this.root.addChild(root)
 
@@ -129,6 +157,9 @@ export class RadioActor {
   private push(button: Button): void {
     button.press = 1
     if (button.id === 'toggle') this.playing = !this.playing
+    this.attract = false
+    this.discovered = true
+    this.glow.visible = false
     this.onCommand?.(button.id)
   }
 
@@ -184,14 +215,29 @@ export class RadioActor {
       button.homeY = key.cy
 
       button.face.clear()
-      // Нарисованные клавиши не перерисовываем: на картинке они уже есть,
-      // от кода нужен только отклик на нажатие.
       if (!this.art) {
         button.face
           .roundRect(-key.w / 2, -key.h / 2, key.w, key.h, key.h * 0.22)
           .fill({ color: KEY })
           .stroke({ color: KEY_EDGE, width: Math.max(1, w * 0.008) })
         drawGlyph(button.face, button.id, key.w, key.h)
+      } else {
+        // Сами клавиши на картинке уже есть, но без значков транспорта —
+        // тестеры не понимали, какая что делает. Значок светлый с тёмной
+        // подложкой: читается и на тёмной, и на светлой клавише.
+        drawGlyph(button.face, button.id, key.w, key.h, 0x1a1512, 1.18, 0.5)
+        drawGlyph(button.face, button.id, key.w, key.h, KEY, 1, 0.85)
+      }
+
+      if (button.id === 'toggle') {
+        this.glow.clear()
+        const gw = key.w * 1.5
+        const gh = key.h * 1.7
+        for (const [k, a] of [[1.45, 0.09], [1.2, 0.15], [1.0, 0.26]] as const) {
+          this.glow
+            .roundRect((-gw * k) / 2, (-gh * k) / 2, gw * k, gh * k, gh * k * 0.32)
+            .fill({ color: LED_ON, alpha: a })
+        }
       }
 
       // Зона нажатия крупнее самой клавиши: на телефоне палец толще.
@@ -309,6 +355,23 @@ export class RadioActor {
       .circle(win.cx + win.w / 2 - win.h * 0.35, winY, Math.max(1.5, w * 0.018))
       .fill({ color: this.playing ? LED_ON : LED_OFF, alpha: lit })
 
+    // Приглашающее мигание живёт от того же дыхания, что и вся сцена:
+    // ровный строб выдал бы «интерфейс» там, где стоит предмет.
+    if (this.attract) {
+      this.attractT += dt
+      if (this.attractT > 30 || this.playing) {
+        this.attract = false
+        this.glow.visible = false
+      } else {
+        const ramp = Math.min(1, this.attractT / 1.5)
+        this.glow.visible = true
+        this.glow.alpha =
+          ramp *
+          (0.3 + 0.5 * (0.5 + 0.5 * Math.sin(this.attractT * 4.2))) *
+          (0.85 + 0.15 * flicker)
+      }
+    }
+
     for (const button of this.buttons) {
       if (button.press > 0) button.press = Math.max(0, button.press - dt * 6)
       button.root.y = button.homeY + button.press * h * 0.02
@@ -318,13 +381,23 @@ export class RadioActor {
 }
 
 /** Значки транспорта. Треугольники рисуются, а не набираются шрифтом:
- *  юникодные ▶◀ разъезжаются по метрикам между платформами. */
-function drawGlyph(g: Graphics, id: RadioCommand, w: number, h: number): void {
-  const s = Math.min(w, h) * 0.3
-  const ink = 0x2c2620
+ *  юникодные ▶◀ разъезжаются по метрикам между платформами.
+ *  `scale`/`alpha` нужны нарисованному корпусу: тёмная подложка чуть
+ *  крупнее светлого значка даёт контур, видимый на любой клавише. */
+function drawGlyph(
+  g: Graphics,
+  id: RadioCommand,
+  w: number,
+  h: number,
+  color = 0x2c2620,
+  scale = 1,
+  alpha = 1,
+): void {
+  const s = Math.min(w, h) * 0.3 * scale
+  const ink = color
 
   if (id === 'toggle') {
-    g.poly([-s * 0.5, -s, s * 0.7, 0, -s * 0.5, s]).fill({ color: ink })
+    g.poly([-s * 0.5, -s, s * 0.7, 0, -s * 0.5, s]).fill({ color: ink, alpha })
     return
   }
 
@@ -334,8 +407,8 @@ function drawGlyph(g: Graphics, id: RadioCommand, w: number, h: number): void {
       offset + dir * s * 0.5, 0,
       offset - dir * s * 0.4, -s * 0.8,
       offset - dir * s * 0.4, s * 0.8,
-    ]).fill({ color: ink })
+    ]).fill({ color: ink, alpha })
   }
   g.rect(dir * s * 1.05 - (dir > 0 ? 0 : s * 0.18), -s * 0.8, s * 0.18, s * 1.6)
-    .fill({ color: ink })
+    .fill({ color: ink, alpha })
 }
