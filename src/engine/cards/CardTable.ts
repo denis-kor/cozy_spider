@@ -91,6 +91,41 @@ function makeShadowTexture(renderer: Renderer, w: number, h: number, resolution:
 }
 
 /**
+ * Мягкая подложка под картами — «дыхание» тьмы, а не панель.
+ *
+ * Раньше это был скруглённый прямоугольник с обводкой, и по его краю на
+ * фоне читалась рамка: внутри сцена темнее, снаружи светлее, между ними
+ * чёткая линия (фидбек дизайнера). Теперь та же подложка печётся ОДИН раз
+ * с блюром в RenderTexture — плотная под картами и тающая в ноль к краям.
+ * Ни границы, ни линии; в кадре фильтров нет, как у тени карты.
+ */
+function makeScrimTexture(
+  renderer: Renderer,
+  w: number,
+  h: number,
+  radius: number,
+  gradient: FillGradient,
+  blur: number,
+  pad: number,
+  resolution: number,
+): Texture {
+  const g = new Graphics()
+  g.roundRect(pad, pad, w, h, radius).fill(gradient)
+  g.filters = [new BlurFilter({ strength: blur, quality: 4 })]
+
+  const target = RenderTexture.create({
+    width: w + pad * 2,
+    height: h + pad * 2,
+    resolution,
+    antialias: false,
+  })
+  renderer.render({ container: g, target })
+  g.destroy(true)
+
+  return new Texture({ source: target.source })
+}
+
+/**
  * Игровой стол: раскладка, ввод, анимации.
  *
  * Состояние берётся из `core`. Логика меняется мгновенно и возвращает
@@ -102,13 +137,15 @@ export class CardTable {
   readonly root = new Container()
   readonly tweener = new Tweener()
 
-  private readonly scrim = new Graphics()
+  private readonly scrim = new Sprite()
   private readonly slotLayer = new Container()
   private readonly cardLayer = new Container()
   private readonly dragLayer = new Container()
 
   private atlas!: DeckAtlas
   private shadowTexture!: Texture
+  private scrimTexture?: Texture
+  private scrimKey = ''
   private renderer: Renderer
   private locale: DeckLocale
   private resolution: number
@@ -249,7 +286,12 @@ export class CardTable {
     const bottomBar = Math.max(96, height * 0.16)
 
     const usable = width - sideMargin * 2 - gap * (COLUMNS - 1)
-    const cardW = Math.max(MIN_CARD_W, usable / COLUMNS)
+    // Стол не растягивается во всю ширину. Десять колонок «в край» делают
+    // карты громоздкими и давят сцену; референс от дизайнера — компактная
+    // раскладка с воздухом по бокам, ближе к настольному «Пауку». Ширину
+    // карты держим долей экрана; центрирование ниже уже считает по boardW.
+    const maxCardW = width * 0.08
+    const cardW = Math.max(MIN_CARD_W, Math.min(usable / COLUMNS, maxCardW))
     const cardH = cardW * CARD_ASPECT
 
     const columnStep = cardW + gap
@@ -279,17 +321,29 @@ export class CardTable {
     let faceUpStep = cardH * 0.30
     const needed = worstFaceDown * faceDownStep + worstFaceUp * faceUpStep
     if (needed > available) {
-      const k = Math.max(0.22, available / needed)
-      faceDownStep *= k
-      faceUpStep *= k
+      // Ужимаем перекрытие, но у ЛИЦЕВЫХ карт не режем угловой индекс: ранг
+      // и масть обязаны торчать из-под накрывающей карты, иначе стопку не
+      // прочитать (запрос дизайнера). Недобор высоты добираем с рубашек —
+      // там достаточно щели, чтобы карта читалась как «ещё одна». Пол faceUp
+      // равен высоте уголка ранг+масть (~0.22 высоты карты, см. drawCorner).
+      const k = available / needed
+      faceUpStep = Math.max(cardH * 0.22, faceUpStep * k)
+      faceDownStep = Math.max(cardH * 0.05, faceDownStep * k)
     }
-
-    const trayY = height - bottomBar * 0.5
 
     // Карта лотка считается ОТ высоты лотка, а не долей игровой карты:
     // доля на высоких экранах вылезала за нижний край, и тестеры видели
     // обрезанные «слишком маленькие карты в углу».
-    const trayCardW = Math.min(cardW, (bottomBar - 12) / CARD_ASPECT)
+    // +15% по фидбеку: карты лотка казались мелковаты. Потолок cardW
+    // остаётся — лоток не должен спорить с игровыми картами.
+    const trayCardW = Math.min(cardW, ((bottomBar - 12) / CARD_ASPECT) * 1.15)
+
+    // Укрупнённая карта уже не помещается в полосу целиком, поэтому центр
+    // лотка не середина полосы, а «как можно ниже, но с полем 6 px».
+    const trayY = Math.min(
+      height - bottomBar * 0.5,
+      height - (trayCardW * CARD_ASPECT) / 2 - 6,
+    )
 
     return {
       cardW,
@@ -313,33 +367,47 @@ export class CardTable {
 
   private drawScrim(): void {
     const l = this.layout
-    const pad = l.cardW * 0.32
-    const x = l.originX - l.cardW / 2 - pad
-    const y = l.originY - l.cardH / 2 - pad
-    const w = l.boardW + pad * 2
-    // Нижний край уводится ЗА экран: раньше обводка скрима проходила по
-    // картам лотка и читалась как непонятная полоска (фидбек тестеров).
-    const h = this.viewH + pad - y
+    const margin = l.cardW * 0.32
+    const x = l.originX - l.cardW / 2 - margin
+    const y = l.originY - l.cardH / 2 - margin
+    const w = l.boardW + margin * 2
+    // Нижний край уводится ЗА экран: плотной границы снизу быть не должно.
+    const h = this.viewH + margin - y
+    const radius = l.cardW * 0.2
 
-    // Подложка. Не украшение: без неё карты теряются на детализированном
-    // фоне, а иллюстрация начинает спорить с игровым полем.
-    //
-    // Градиент по вертикали: плотно там, где лежат карты, и почти прозрачно
-    // ниже. Равномерная заливка гасила бы пруд, ради которого сцена и
-    // рисовалась.
-    // Плотность подобрана под ТЁМНУЮ сцену. Значения, разумные для яркого
-    // плейсхолдера, на ночном пруду складываются с ним и дают кашу:
-    // подложка обязана отделять карты от фона, а не гасить фон.
-    const gradient = new FillGradient(x, y, x, y + h)
+    // Подложка зависит только от размеров ПОЛЯ (не от длины колонок), поэтому
+    // тяжёлое запекание с блюром идёт лишь при смене геометрии, а не на
+    // каждый ход, хотя sync() и дёргает drawScrim постоянно.
+    const key = `${Math.round(w)}x${Math.round(h)}x${Math.round(radius)}`
+    if (key === this.scrimKey) return
+    this.scrimKey = key
+
+    // Подложка не украшение: без неё карты теряются на детализированном фоне.
+    // Но краёв у неё быть не должно — блюр растворяет их в ноль, чтобы на
+    // фоне не читалась рамка. Градиент по вертикали: плотно там, где лежат
+    // карты, и почти прозрачно ниже — равномерная заливка гасила бы пруд.
+    // Плотность подобрана под ТЁМНУЮ сцену: отделять карты от фона, не гасить
+    // фон. Запас (blurPad) обязателен — иначе блюр обрежется по краю текстуры.
+    const blurPad = Math.round(Math.max(48, l.cardW * 0.7))
+    const gradient = new FillGradient(0, blurPad, 0, blurPad + h)
     gradient.addColorStop(0.0, 'rgba(6, 14, 12, 0.46)')
     gradient.addColorStop(0.45, 'rgba(6, 14, 12, 0.32)')
     gradient.addColorStop(1.0, 'rgba(6, 14, 12, 0.08)')
 
-    this.scrim
-      .clear()
-      .roundRect(x, y, w, h, l.cardW * 0.2)
-      .fill(gradient)
-      .stroke({ color: 0xd8c9a0, width: 1, alpha: 0.12 })
+    if (this.scrimTexture) this.scrimTexture.destroy(true)
+    this.scrimTexture = makeScrimTexture(
+      this.renderer,
+      w,
+      h,
+      radius,
+      gradient,
+      Math.max(20, l.cardW * 0.28),
+      blurPad,
+      1,
+    )
+    this.scrim.texture = this.scrimTexture
+    // Форма нарисована со сдвигом blurPad внутри текстуры — компенсируем.
+    this.scrim.position.set(x - blurPad, y - blurPad)
   }
 
   private drawSlots(): void {
