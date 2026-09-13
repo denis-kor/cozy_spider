@@ -211,15 +211,19 @@ function drawCorner(
   flip: boolean,
 ): void {
   const pad = w * 0.075
-  const fontSize = w * 0.21
+  const fontSize = w * 0.19
 
-  const pipSize = w * 0.125
+  const pipSize = w * 0.115
   // Якорь по центру и поворот на 180°. Отрицательный масштаб при якоре в
   // углу разворачивает глиф ОТ точки привязки, и нижний индекс уезжает за
   // пределы карты — снаружи это читается как чужая карта под текущей.
   const cx = pad + pipSize * 0.62
-  const cyText = h * 0.078
-  const cyPip = h * 0.196
+  // Ранг и масть подтянуты к верхней кромке и друг к другу: в «Пауке»
+  // из-под накрывающей карты видна только верхняя полоска, и оба знака
+  // обязаны уместиться в неё вместе. Нижняя кромка значка держится выше
+  // ~0.215h — под этот порог подстроен пол faceUpStep в раскладке.
+  const cyText = h * 0.068
+  const cyPip = h * 0.172
 
   const mirror = (x: number, y: number): [number, number] => (flip ? [w - x, h - y] : [x, y])
 
@@ -264,12 +268,17 @@ function drawCorner(
  * читается с угловой плашки, и в «Пауке» именно её игрок и читает: у
  * накрытой карты видно только верхнюю полоску.
  */
-function drawArtFace(parent: Container, art: Texture, w: number, h: number): void {
+function drawArtFace(parent: Container, art: Texture, w: number, h: number, bleed: boolean): void {
   const radius = w * 0.075
-  const fx = w * 0.035
-  const fy = h * 0.024
-  const fw = w * 0.93
-  const fh = h * 0.952
+  // Пейзажная колода (pond) framed под угловой номинал: арт вставляется в
+  // окно с кремовым кантом, чтобы фигуры совпадали с числовыми картами.
+  // Колода-цельный-дизайн (таро, index:false) несёт собственный кант прямо
+  // в арте — там рисуем ПОД ОБРЕЗ: иначе поверх родной рамки ложится ещё и
+  // кремовая, карта получает двойную рамку (запрос дизайнера — убрать её).
+  const fx = bleed ? 0 : w * 0.035
+  const fy = bleed ? 0 : h * 0.024
+  const fw = bleed ? w : w * 0.93
+  const fh = bleed ? h : h * 0.952
 
   const sprite = new Sprite(art)
   const scale = Math.max(fw / art.width, fh / art.height)
@@ -279,7 +288,9 @@ function drawArtFace(parent: Container, art: Texture, w: number, h: number): voi
   sprite.position.set(fx + fw / 2, fy + fh / 2)
 
   const clip = new Graphics()
-  clip.roundRect(fx, fy, fw, fh, radius * 0.8).fill({ color: 0xffffff })
+  // Под обрез скругление окна совпадает со скруглением карты — арт ложится
+  // ровно в силуэт, бумаги по краю не остаётся.
+  clip.roundRect(fx, fy, fw, fh, bleed ? radius : radius * 0.8).fill({ color: 0xffffff })
   sprite.mask = clip
 
   parent.addChild(clip, sprite)
@@ -306,11 +317,14 @@ function drawIndexTab(
   // Читаемость на тёмном/светлом арте держит обводка бумажного цвета у
   // цифры и «гало» под значком масти. Если не приживётся — вернуть
   // roundRect с PAPER 0.93 и маской карты (см. историю файла).
-  const fontSize = w * 0.22
-  const pipSize = w * 0.135
+  const fontSize = w * 0.2
+  const pipSize = w * 0.125
   const cx = w * 0.115
-  const cyText = h * 0.072
-  const cyPip = h * 0.185
+  // Тот же поджатый уголок, что у бумажных карт (drawCorner): из-под
+  // накрывающей карты ранг и масть должны читаться одинаково независимо
+  // от того, лицо это с иллюстрацией или процедурное.
+  const cyText = h * 0.068
+  const cyPip = h * 0.17
 
   const mirror = (px: number, py: number): [number, number] =>
     flip ? [w - px, h - py] : [px, py]
@@ -365,7 +379,10 @@ function buildFace(
   const artwork = art?.faces?.get(faceKey(suit, rank))
 
   if (artwork) {
-    drawArtFace(card, artwork, w, h)
+    // Колода со своим номиналом в арте (index:false) — цельный дизайн карты:
+    // рисуем под обрез, без кремового канта и без нашего углового индекса.
+    const bleed = !!art?.hideIndex
+    drawArtFace(card, artwork, w, h, bleed)
     if (!art?.hideIndex) {
       drawIndexTab(card, label, suit, w, h, color, false)
       drawIndexTab(card, label, suit, w, h, color, true)
@@ -406,14 +423,19 @@ function buildFace(
     card.addChild(pip)
   } else {
     const pips = new Graphics()
-    // Поле пипсов держится внутри 44..124 по вертикали: выше и ниже стоят
-    // угловые индексы, и налезающий на них пипс читается как грязь.
-    const fieldW = w * 0.27
-    const fieldH = h * 0.20
-    const size = w * 0.185
+    // Пипсы заполняют лицо во всю высоту, как на настоящей карте: две
+    // колонки, крайние ряды у верхней и нижней кромки (ny=±1 -> ~0.17..0.83h).
+    // Колонки поджаты внутрь (30/70% ширины), чтобы верхний-левый и
+    // нижний-правый пипс расходились с угловым индексом, а не налезали на него.
+    const fieldW = w * 0.20
+    const fieldH = h * 0.34
+    const size = w * 0.17
 
+    // Все пипсы стоят прямо, как на референсе колоды: нижнюю половину НЕ
+    // переворачиваем (традиционный «перевёрнутый низ» тут не нужен —
+    // дизайнер попросил единую ориентацию значков).
     for (const [nx, ny] of PIPS[rank]) {
-      drawSuit(pips, suit, w / 2 + nx * fieldW, h / 2 + ny * fieldH, size, color, ny > 0.01)
+      drawSuit(pips, suit, w / 2 + nx * fieldW, h / 2 + ny * fieldH, size, color)
     }
     card.addChild(pips)
   }
@@ -423,22 +445,25 @@ function buildFace(
   return card
 }
 
-function buildBack(w: number, h: number, art?: Texture): Container {
+function buildBack(w: number, h: number, art?: Texture, bleed = false): Container {
   const back = new Container()
   const r = w * 0.075
 
   if (art) {
-    // Рисунок кладётся в то же поле, что и процедурная рубашка: бумажная
-    // подложка по краю, арт внутри. Иначе рубашка идёт в край карты, а
-    // лица — с кремовой рамкой, и колода перестаёт выглядеть колодой.
-    const paper = new Graphics()
-    paper.roundRect(0, 0, w, h, r).fill({ color: PAPER })
-    back.addChild(paper)
+    // Пейзажная рубашка кладётся в то же поле, что и лица: бумажная подложка
+    // по краю, арт внутри — иначе рубашка пошла бы в край, а лица с кантом,
+    // и колода перестала бы выглядеть колодой. Рубашка-цельный-дизайн (таро)
+    // несёт кант в самом арте — её рисуем под обрез, как и лица этой колоды.
+    const fx = bleed ? 0 : w * 0.035
+    const fy = bleed ? 0 : h * 0.024
+    const fw = bleed ? w : w * 0.93
+    const fh = bleed ? h : h * 0.952
 
-    const fx = w * 0.035
-    const fy = h * 0.024
-    const fw = w * 0.93
-    const fh = h * 0.952
+    if (!bleed) {
+      const paper = new Graphics()
+      paper.roundRect(0, 0, w, h, r).fill({ color: PAPER })
+      back.addChild(paper)
+    }
 
     const sprite = new Sprite(art)
     sprite.width = fw
@@ -446,7 +471,7 @@ function buildBack(w: number, h: number, art?: Texture): Container {
     sprite.position.set(fx, fy)
 
     const clip = new Graphics()
-    clip.roundRect(fx, fy, fw, fh, r * 0.8).fill({ color: 0xffffff })
+    clip.roundRect(fx, fy, fw, fh, bleed ? r : r * 0.8).fill({ color: 0xffffff })
     sprite.mask = clip
 
     back.addChild(clip, sprite)
@@ -528,7 +553,7 @@ export function buildDeckAtlas(
       place(buildFace(suit, rank, style, w, h, art), faceKey(suit, rank))
     }
   }
-  place(buildBack(w, h, art?.back), 'back')
+  place(buildBack(w, h, art?.back, !!art?.hideIndex), 'back')
   place(buildSlot(w, h), 'slot')
 
   const cssW = cols * (w + pad) + pad

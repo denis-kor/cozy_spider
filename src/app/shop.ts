@@ -19,6 +19,8 @@ interface CatalogSku {
   title: string
   desc: string
   price: number
+  /** Картинка-витрина колоды: показывается по кнопке «Посмотреть» до покупки. */
+  preview?: string
 }
 
 interface Catalog {
@@ -126,8 +128,54 @@ export function mountShop(root: HTMLElement, adapter: PlatformAdapter, hooks: Sh
         }
       }
       card.appendChild(action)
+
+      // «Посмотреть колоду» — витрина карт до покупки. Показываем только у
+      // тех паков, у кого в каталоге есть картинка-превью.
+      if (sku.preview) {
+        const look = document.createElement('button')
+        look.className = 'shop-preview-btn'
+        look.textContent = 'Посмотреть колоду'
+        look.onclick = () => openPreview(sku.preview!, sku.title)
+        card.appendChild(look)
+      }
+
       list.appendChild(card)
     }
+  }
+
+  // Лайтбокс поверх лавки: сама витрина одной картинкой. Живёт отдельным
+  // оверлеем (z-index 50 в index.html), чтобы лечь над лавкой и титульником.
+  function openPreview(src: string, title: string): void {
+    track('deck_preview', { sku: title })
+    const box = document.createElement('div')
+    box.className = 'shop-lightbox'
+    box.innerHTML = `
+      <button class="shop-lightbox-close" aria-label="Закрыть">✕</button>
+      <figure class="shop-lightbox-fig">
+        <img src="${src}" alt="Колода «${title}» — примеры карт" />
+        <figcaption>${title}</figcaption>
+      </figure>
+    `
+    const shut = (): void => {
+      box.remove()
+      window.removeEventListener('keydown', onKey, true)
+    }
+    // Escape ловим в фазе перехвата и глушим: иначе тот же Escape закрыл бы
+    // и лавку под лайтбоксом.
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        shut()
+      }
+    }
+    box.addEventListener('click', (e) => {
+      // Клик по фону или крестику закрывает; по самой картинке — нет.
+      if (e.target === box || (e.target as HTMLElement).closest('.shop-lightbox-close')) shut()
+    })
+    window.addEventListener('keydown', onKey, true)
+    root.appendChild(box)
+    // Кадр на применение класса — плавное появление.
+    requestAnimationFrame(() => box.classList.add('show'))
   }
 
   function close(): void {

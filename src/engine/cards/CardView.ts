@@ -23,6 +23,8 @@ export class CardView {
   private lift = 0
   private destroyed = false
   private flashG: Graphics | null = null
+  /** Показывать рубашку, даже если карта логически лицом вверх (полёт раздачи). */
+  private forceBack = false
 
   constructor(
     readonly card: Card,
@@ -43,9 +45,46 @@ export class CardView {
 
   /** Обновить лицо/рубашку под текущее состояние карты. */
   refresh(): void {
-    this.face.texture = this.card.faceUp
-      ? this.atlas.face(this.card.suit, this.card.rank)
-      : this.atlas.back
+    this.face.texture =
+      this.card.faceUp && !this.forceBack
+        ? this.atlas.face(this.card.suit, this.card.rank)
+        : this.atlas.back
+  }
+
+  /**
+   * Насильно показать рубашку поверх логического лица.
+   *
+   * Нужно раздаче: открытые карты (низ каждой колонки) обязаны лететь из
+   * колоды рубашкой и перевернуться лицом только на приземлении.
+   */
+  showBack(on: boolean): void {
+    if (this.forceBack === on) return
+    this.forceBack = on
+    this.refresh()
+  }
+
+  /**
+   * Переворот рубашка→лицо на месте: карта сжимается по ширине в ноль,
+   * на кромке меняет сторону и раскрывается обратно с лёгким пружинным
+   * доводом. Живёт на `root.scale.x`, а не на ширине спрайта: ширина
+   * задаёт кегль карты в раскладке, мешать её с флипом нельзя.
+   */
+  flip(tweener: Tweener, delay = 0, dur = 0.45): void {
+    // Плавный переворот: ширина разгоняется к ребру (карта встаёт боком),
+    // на кромке меняется сторона и мягко раскрывается обратно — без
+    // пружинного «щелчка». Половина времени на сжатие, половина на раскрытие;
+    // скорости на кромке (конец сжатия ↔ начало раскрытия) совпадают, поэтому
+    // переход через ребро без рывка. Длиннее — плавнее.
+    const half = dur * 0.5
+    tweener.to(this.root.scale, { x: 0 }, {
+      duration: half,
+      delay,
+      ease: (t) => t * t * t,
+      onDone: () => {
+        this.showBack(false)
+        tweener.to(this.root.scale, { x: 1 }, { duration: half, ease: easing.outCubic })
+      },
+    })
   }
 
   resize(width: number, height: number): void {
@@ -163,8 +202,15 @@ export class CardView {
    */
   kill(tweener: Tweener): void {
     tweener.kill(this.root)
+    tweener.kill(this.root.scale)
     tweener.kill(this.face.skew)
     this.clearFlash(tweener)
+    // Снятая с анимаций карта обязана остаться в валидном виде, а не застрять
+    // на полпути переворота. Иначе прерванный флип раздачи (карту схватили в
+    // момент открытия) навсегда оставлял бы её рубашкой: forceBack залипал, и
+    // refresh() рисовал рубашку даже поверх логически открытой карты.
+    this.root.scale.x = this.root.scale.y
+    this.showBack(false)
   }
 
   destroy(): void {

@@ -3,26 +3,26 @@
   "configurations": [
     {
       "name": "cozy-spider",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeExecutable": "/Users/annav/.local/node/bin/node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js"],
       "port": 5173
     },
     {
       "name": "cozy-spider-alt",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "5199", "--strictPort"],
+      "runtimeExecutable": "/Users/annav/.local/node/bin/node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "5199", "--strictPort"],
       "port": 5199
     },
     {
       "name": "cozy-spider-alt3",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "5219", "--strictPort"],
+      "runtimeExecutable": "/Users/annav/.local/node/bin/node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "5219", "--strictPort"],
       "port": 5219
     },
     {
       "name": "cozy-spider-alt2",
-      "runtimeExecutable": "npm",
-      "runtimeArgs": ["run", "dev", "--", "--port", "5209", "--strictPort"],
+      "runtimeExecutable": "/Users/annav/.local/node/bin/node",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js", "--port", "5209", "--strictPort"],
       "port": 5209
     }
   ]

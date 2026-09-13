@@ -37,11 +37,6 @@ export function mountHud(stage: Stage, root: HTMLElement, hooks: HudHooks = {}):
           </span>
         </span>
       </div>
-      <div class="hud-group hud-stats">
-        <span><b data-score>500</b><i>счёт</i></span>
-        <span><b data-moves>0</b><i>ходы</i></span>
-        <span><b data-time>00:00</b><i>время</i></span>
-      </div>
       <div class="hud-group">
         <button data-new>Новая игра</button>
         <button data-restart>Заново</button>
@@ -57,9 +52,6 @@ export function mountHud(stage: Stage, root: HTMLElement, hooks: HudHooks = {}):
 
   const q = <T extends HTMLElement>(sel: string): T => root.querySelector(sel) as T
 
-  const score = q<HTMLElement>('[data-score]')
-  const moves = q<HTMLElement>('[data-moves]')
-  const time = q<HTMLElement>('[data-time]')
   const toast = q<HTMLElement>('[data-toast]')
   const undoBtn = q<HTMLButtonElement>('[data-undo]')
   const suitButtons = Array.from(
@@ -72,7 +64,6 @@ export function mountHud(stage: Stage, root: HTMLElement, hooks: HudHooks = {}):
   }
   markSuits()
 
-  let started = 0
   let toastTimer = 0
 
   function say(text: string): void {
@@ -83,9 +74,6 @@ export function mountHud(stage: Stage, root: HTMLElement, hooks: HudHooks = {}):
   }
 
   function refresh(): void {
-    const state = stage.table.game.state
-    score.textContent = String(state.score)
-    moves.textContent = String(state.moves)
     undoBtn.disabled = !stage.table.game.canUndo
 
     if (stage.table.game.won()) say('Собрано! 🎉')
@@ -96,13 +84,11 @@ export function mountHud(stage: Stage, root: HTMLElement, hooks: HudHooks = {}):
 
   q<HTMLButtonElement>('[data-new]').onclick = () => {
     stage.table.newGame((Math.random() * 0x7fffffff) | 0)
-    started = performance.now()
     refresh()
   }
 
   q<HTMLButtonElement>('[data-restart]').onclick = () => {
     stage.table.restart()
-    started = performance.now()
     refresh()
   }
 
@@ -112,10 +98,11 @@ export function mountHud(stage: Stage, root: HTMLElement, hooks: HudHooks = {}):
   }
 
   q<HTMLButtonElement>('[data-hint]').onclick = () => {
+    // Подсказка живёт на столе: стопка-источник и цель подсвечиваются, а
+    // когда единственный ход — раздача, подсвечивается колода в углу. Плашку
+    // с текстом оставляем только на случай, когда показать нечего (тупик).
     const move = stage.table.hint()
-    if (move?.t === 'move') say(`Подсвечено: колонка ${move.from + 1} → ${move.to + 1}`)
-    else if (move?.t === 'deal') say('Полезных ходов нет — раздайте из запаса')
-    else say('Полезных ходов не видно')
+    if (!move) say('Полезных ходов не видно')
   }
 
   if (debugWin) {
@@ -137,19 +124,10 @@ export function mountHud(stage: Stage, root: HTMLElement, hooks: HudHooks = {}):
       const suits = Number(b.dataset.suit) as SuitCount
       if (suits === stage.table.game.suits) return
       stage.table.setSuits(suits)
-      started = performance.now()
       markSuits()
       refresh()
     }
   }
-
-  started = performance.now()
-  setInterval(() => {
-    const total = Math.floor((performance.now() - started) / 1000)
-    const mm = String(Math.floor(total / 60)).padStart(2, '0')
-    const ss = String(total % 60).padStart(2, '0')
-    time.textContent = `${mm}:${ss}`
-  }, 500)
 
   refresh()
 }
