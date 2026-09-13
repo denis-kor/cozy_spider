@@ -76,6 +76,10 @@ async function main(): Promise<void> {
   boot.classList.add('done')
   setTimeout(() => boot.remove(), 600)
 
+  // Взводим стартовую раздачу: пока сверху висит титульный экран, вся колода
+  // ждёт стопкой в правом нижнем углу. По «Играть» она разлетится по столу.
+  stage.table.armDeal()
+
   // HUD первым: он пишет root.innerHTML и снёс бы всё, смонтированное раньше.
   let shop: ReturnType<typeof mountShop> | undefined
   let start: ReturnType<typeof mountStart> | undefined
@@ -115,7 +119,11 @@ async function main(): Promise<void> {
     onShop: () => shop?.open(),
     // Полминуты приглашающего мигания «пуска» на кассетнике — от входа в
     // игру, а не от загрузки: сцена живёт и за титульником.
-    onPlay: () => stage.radio?.beginAttract(),
+    onPlay: () => {
+      stage.radio?.beginAttract()
+      // Титул уходит — стол открывается стартовой раздачей из угла.
+      stage.table.dealOutIfArmed()
+    },
   })
   mountRadio(stage)
 

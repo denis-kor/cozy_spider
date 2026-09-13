@@ -137,11 +137,6 @@
         border-color: rgba(216, 201, 160, 0.42);
       }
 
-      .hud-stats { gap: 18px; }
-      .hud-stats span { display: flex; flex-direction: column; align-items: center; line-height: 1.15; }
-      .hud-stats b { font-size: 20px; font-weight: 600; }
-      .hud-stats i { font-size: 12px; font-style: normal; color: var(--ink-dim); letter-spacing: 0.06em; }
-
       /* Кегли на ступень крупнее исходных: «на моём экране не видно»
          (фидбек тестеров). */
       button {
@@ -246,6 +241,68 @@
       }
       .shop-note a { color: inherit; }
       .shop-note a:hover { color: var(--ink); }
+
+      /* «Посмотреть колоду»: вторичная, тихая кнопка под основным действием. */
+      .shop-preview-btn {
+        margin-top: 2px;
+        align-self: flex-start;
+        padding: 4px 0;
+        background: transparent;
+        border-color: transparent;
+        color: var(--ink-dim);
+        font-size: 12px;
+        letter-spacing: 0.03em;
+      }
+      .shop-preview-btn::after { content: " ↗"; opacity: 0.7; }
+      .shop-preview-btn:hover:not(:disabled) { background: transparent; color: #d8c9a0; }
+
+      /* Лайтбокс витрины: картинка колоды поверх лавки. */
+      .shop-lightbox {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 24px;
+        box-sizing: border-box;
+        background: rgba(4, 8, 7, 0.82);
+        backdrop-filter: blur(4px);
+        opacity: 0;
+        transition: opacity 180ms ease;
+        cursor: zoom-out;
+        /* #hud выключает клики (pointer-events:none) — вернуть их, иначе
+           мышь проваливается сквозь лайтбокс на титульник под ним. */
+        pointer-events: auto;
+      }
+      .shop-lightbox.show { opacity: 1; }
+      .shop-lightbox-fig {
+        margin: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+        cursor: default;
+      }
+      .shop-lightbox-fig img {
+        max-width: min(94vw, 1120px);
+        max-height: 84vh;
+        border-radius: 12px;
+        border: 1px solid var(--edge);
+        box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+      }
+      .shop-lightbox-fig figcaption {
+        font-size: 14px;
+        letter-spacing: 0.05em;
+        color: var(--ink-dim);
+      }
+      .shop-lightbox-close {
+        position: absolute;
+        top: 16px;
+        right: 16px;
+        padding: 6px 12px;
+        font-size: 16px;
+      }
 
       /* Титульный экран. Сцена живёт позади и просвечивает: она и есть
          заставка. Панель — тот же язык, что HUD и лавка. */
@@ -485,7 +542,6 @@
         .hud-title { display: none; }
         .hud-bar { padding: 6px 8px; gap: 6px; }
         .hud-group { padding: 4px 8px; border-radius: 10px; }
-        .hud-stats { gap: 12px; }
         button { padding: 5px 8px; font-size: 13px; }
       }
     </style>

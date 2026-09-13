@@ -160,6 +160,8 @@ export class CardTable {
   private selected: { column: number; count: number } | null = null
   private stockPile = new Container()
   private atlasCardW = 0
+  /** Стол взведён под стартовую раздачу: колода ждёт стопкой в углу. */
+  private dealPending = false
 
   game: Game
 
@@ -275,7 +277,7 @@ export class CardTable {
    */
   private computeLayout(width: number, height: number): Layout {
     const sideMargin = Math.max(10, width * 0.018)
-    const gap = Math.max(4, width * 0.006)
+    const gap = Math.max(6, width * 0.011)
 
     // Верх отдан HUD, низ — запасу и собранным последовательностям.
     // Колонки живут строго между ними: карта, уехавшая под кнопку, — это
@@ -290,7 +292,7 @@ export class CardTable {
     // карты громоздкими и давят сцену; референс от дизайнера — компактная
     // раскладка с воздухом по бокам, ближе к настольному «Пауку». Ширину
     // карты держим долей экрана; центрирование ниже уже считает по boardW.
-    const maxCardW = width * 0.08
+    const maxCardW = width * 0.076
     const cardW = Math.max(MIN_CARD_W, Math.min(usable / COLUMNS, maxCardW))
     const cardH = cardW * CARD_ASPECT
 
@@ -469,8 +471,17 @@ export class CardTable {
         if (view.root.parent !== this.cardLayer) this.cardLayer.addChild(view.root)
         else this.cardLayer.setChildIndex(view.root, this.cardLayer.children.length - 1)
 
-        if (animate) view.moveHome(this.tweener, { duration: 0.26, spring: true })
-        else view.snapHome()
+        if (animate) {
+          view.moveHome(this.tweener, { duration: 0.26, spring: true })
+        } else if (this.dealPending) {
+          // Стол взведён: держим всю колоду стопкой в правом нижнем углу,
+          // рубашками вверх, пока игрок не нажмёт «Играть» (см. dealOut).
+          view.showBack(true)
+          view.root.rotation = 0
+          view.root.position.set(this.layout.stockX, this.layout.stockY)
+        } else {
+          view.snapHome()
+        }
       }
     }
 
@@ -827,7 +838,109 @@ export class CardTable {
     this.game = new Game(seed, suits)
     this.selected = null
     this.rebuildViews()
+    // Свежий расклад всегда въезжает раздачей из угла, а не появляется разом.
+    this.dealOut()
+  }
+
+  /**
+   * Взвести стартовую раздачу: сложить всю колоду стопкой в правом нижнем
+   * углу рубашками вверх и держать так. Вызывается на старте, пока поверх
+   * стола висит титульный экран, — раздача играется по «Играть».
+   */
+  armDeal(): void {
+    this.dealPending = true
     this.sync(false)
+  }
+
+  /** Разыграть стартовую раздачу, только если стол взведён (вход через титул). */
+  dealOutIfArmed(): void {
+    if (this.dealPending) this.dealOut()
+  }
+
+  /**
+   * Стартовая раздача.
+   *
+   * Вся колода лежит стопкой в правом нижнем углу (там же, где потом запас)
+   * и разлетается по десяти колонкам «ряд за рядом, слева направо» — так
+   * читается настоящая сдача. Летят рубашки; десять открытых карт (низ
+   * каждой колонки) переворачиваются лицом в момент приземления.
+   *
+   * Состояние уже посчитано логикой — это чистая подача. Клик во время
+   * полёта ничего не ломает: попадание считается по раскладке, а не по
+   * спрайту (§4).
+   */
+  dealOut(): void {
+    this.dealPending = false
+    this.layout = this.computeLayout(this.viewW, this.viewH)
+    this.drawScrim()
+    this.positionSlots()
+    this.tweener.killAll()
+
+    const l = this.layout
+    const state = this.game.state
+
+    // Порядок «ряд за рядом»: сначала верхняя карта каждой колонки, потом
+    // вторая и так далее. Именно этот проход слева направо и читается глазом
+    // как сдача, а не как высыпанная разом стопка.
+    const seq: { view: CardView; faceUp: boolean }[] = []
+    let maxLen = 0
+    for (const col of state.tableau) maxLen = Math.max(maxLen, col.length)
+    for (let row = 0; row < maxLen; row++) {
+      for (let col = 0; col < COLUMNS; col++) {
+        const cards = state.tableau[col]
+        if (row >= cards.length) continue
+        const view = this.viewOf(cards[row])
+        const p = this.cardPosition(col, row)
+        view.homeX = p.x
+        view.homeY = p.y
+        seq.push({ view, faceUp: cards[row].faceUp })
+      }
+    }
+
+    // Разлёт: карта срывается из угла сразу с ходом и мягко тормозит у места
+    // (outCubic). Ни пружины outBack (перелёт места и рывок назад), ни
+    // медленного разгона inOutCubic — тот давал «выползающий» старт, когда вся
+    // колода секунду почти стоит в углу, и это читалось как подтормаживание.
+    // Наклон — едва заметный, чтобы стопка не выглядела штампованной.
+    const step = 0.026
+    const dur = 0.34
+    seq.forEach(({ view, faceUp }, i) => {
+      view.kill(this.tweener)
+      // Открытые прячем рубашкой на время полёта; закрытые и так рубашкой.
+      view.showBack(faceUp)
+      view.root.position.set(l.stockX, l.stockY)
+      view.root.rotation = (Math.random() - 0.5) * 0.08
+
+      if (view.root.parent !== this.cardLayer) this.cardLayer.addChild(view.root)
+      this.cardLayer.setChildIndex(view.root, this.cardLayer.children.length - 1)
+
+      const delay = i * step
+      this.tweener.to(view.root, { x: view.homeX, y: view.homeY }, { duration: dur, delay, ease: easing.outCubic })
+      // Наклон выправляется тем же темпом — карта «ложится» ровно.
+      this.tweener.to(view.root, { rotation: 0 }, { duration: dur, delay, ease: easing.outCubic })
+    })
+
+    // Открытые карты (низ каждой колонки) в полёте не раскрываются — ложатся
+    // рубашкой вместе со всеми. Когда раздача осела, они вспыхивают лицом
+    // волной: от первой колонки слева к последней справа.
+    //
+    // Ритм волны задаёт waveStep — пауза между СТАРТАМИ соседних карт; от него
+    // и зависит общее время «от первой до последней». Сам переворот (flipDur)
+    // длиннее шага, поэтому карты открываются внахлёст: пока доворачивается
+    // первая, уже пошла вторая, третья. Волна идёт плавной рекой, а не чередой
+    // «щелчок-пауза-щелчок», и при этом общий тайминг не растягивается.
+    const dealEnd = (seq.length - 1) * step + dur
+    const waveStep = 0.075
+    const flipDur = 0.45
+    for (let col = 0; col < COLUMNS; col++) {
+      const cards = state.tableau[col]
+      const bottom = cards[cards.length - 1]
+      if (!bottom?.faceUp) continue
+      this.views.get(bottom.id)?.flip(this.tweener, dealEnd + 0.08 + col * waveStep, flipDur)
+    }
+
+    this.drawStock()
+    this.onChange?.()
   }
 
   /** Смена числа мастей — это всегда новый расклад: колода другая. */
@@ -867,6 +980,10 @@ export class CardTable {
       const target = to[to.length - 1]
       if (target) this.views.get(target.id)?.flash(this.tweener, 0.4)
       else this.flashSlot(move.to)
+    } else if (move?.t === 'deal') {
+      // Единственный полезный ход — раздать: подсвечиваем колоду раздачи в
+      // углу, без текстовой плашки.
+      this.flashStock()
     }
     return move
   }
@@ -887,6 +1004,50 @@ export class CardTable {
       this.tweener.to(g, { alpha: up ? 1 : 0 }, {
         duration: up ? 0.22 : 0.38,
         delay: up && left === 2 ? 0.4 : 0,
+        onDone: () => {
+          if (up) fade(false, left)
+          else if (left > 1) fade(true, left - 1)
+          else if (!g.destroyed) g.destroy()
+        },
+      })
+    fade(true, 2)
+  }
+
+  /**
+   * Подсветка колоды раздачи в правом нижнем углу: тёплый пульс на верхней
+   * карте запаса — тот же «блик света», что и подсказка на столе. Зовётся,
+   * когда единственный полезный ход — раздать из запаса.
+   */
+  private flashStock(): void {
+    const l = this.layout
+    const tw = l.trayCardW
+    const th = tw * CARD_ASPECT
+
+    // Запас нарисован веером: карты уходят вверх-влево от stockX/stockY, каждая
+    // со сдвигом 0.14*tw по X и 0.06*tw по Y (см. drawStock). Подсвечиваем ВСЮ
+    // стопку одним контуром по её габаритам, а не одну карту в опорной точке —
+    // иначе блик «сидел» на нижней карте веера и выглядел смещённым от колоды.
+    const deals = Math.max(1, this.game.state.stock.length)
+    const dx = (deals - 1) * tw * 0.14
+    const dy = (deals - 1) * tw * 0.06
+    const pad = tw * 0.05
+    const w = tw + dx + pad * 2
+    const h = th + dy + pad * 2
+    const cx = l.stockX - dx / 2
+    const cy = l.stockY - dy / 2
+
+    const g = new Graphics()
+    g.roundRect(-w / 2, -h / 2, w, h, tw * 0.1)
+      .fill({ color: 0xffd68c, alpha: 0.22 })
+      .stroke({ color: 0xffe0a0, width: Math.max(3, tw * 0.06), alpha: 1 })
+    g.blendMode = 'add'
+    g.alpha = 0
+    g.position.set(cx, cy)
+    this.dragLayer.addChild(g)
+
+    const fade = (up: boolean, left: number): void =>
+      this.tweener.to(g, { alpha: up ? 1 : 0 }, {
+        duration: up ? 0.22 : 0.38,
         onDone: () => {
           if (up) fade(false, left)
           else if (left > 1) fade(true, left - 1)
