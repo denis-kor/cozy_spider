@@ -6,9 +6,18 @@ import { CatActor } from './actors/CatActor'
 import { FlameActor } from './actors/FlameActor'
 import { RadioActor } from './actors/RadioActor'
 import { versioned } from '../assetVersion'
+import { loadLayerTexture, runLimited } from '../textureLoad'
 import type { LoadProgress } from '../loading'
 import type { Ambience } from './Ambience'
 import type { ActorSpec, LayerSpec, SceneSpec } from './types'
+
+/** Как грузить сцену: бюджет памяти под устройство. */
+export interface SceneLoadOptions {
+  /** Множитель размера текстур слоёв: 1 — как есть, 0.5 — вдвое меньше (телефон). */
+  layerTextureScale?: number
+  /** Сколько картинок декодировать одновременно. */
+  loadConcurrency?: number
+}
 
 interface BuiltLayer {
   spec: LayerSpec
@@ -57,7 +66,19 @@ export class LayerScene {
   private viewW = 1
   private viewH = 1
 
-  async load(baseUrl: string, commonUrl: string, progress?: LoadProgress): Promise<void> {
+  /**
+   * Обратный множитель к уменьшению текстур слоёв. На телефоне слои
+   * загружены вдвое меньше (0.5), значит на экране их надо растянуть в
+   * 1/0.5 = 2 раза, чтобы кадр сошёлся. На десктопе — 1, ничего не меняет.
+   */
+  private layerTexScale = 1
+
+  async load(
+    baseUrl: string,
+    commonUrl: string,
+    progress?: LoadProgress,
+    opts?: SceneLoadOptions,
+  ): Promise<void> {
     const [spec, normalMap] = await Promise.all([
       Assets.load<SceneSpec>(versioned(`${baseUrl}/scene.json`)),
       Assets.load<Texture>(versioned(`${commonUrl}/water-normal.png`)),
@@ -68,27 +89,47 @@ export class LayerScene {
     // Normal-map тайлится — иначе на швах вылезет разрыв освещения.
     this.normalMap.source.addressMode = 'repeat'
 
-    // Все картинки сцены — одной параллельной пачкой. Последовательные
-    // await складывали задержки двух десятков запросов друг на друга:
-    // на быстрой сети незаметно, на мобильной — секунды чёрного экрана.
-    const urls = new Set<string>()
+    // Бюджет памяти под устройство. На телефоне слои грузим вдвое меньше
+    // (иначе Safari убивает WebGL-контекст ещё на декоде — §13, жалоба с
+    // iPhone) и декодируем не всё разом, а пачками, чтобы срезать пиковый
+    // всплеск памяти на старте.
+    const texScale = opts?.layerTextureScale ?? 1
+    const concurrency = opts?.loadConcurrency ?? 8
+    this.layerTexScale = texScale > 0 ? 1 / texScale : 1
+
+    // Слои и их маски — те самые тяжёлые мастера 2560×1600, их и уменьшаем.
+    const layerUrls = new Set<string>()
     for (const layer of this.spec.layers) {
-      urls.add(layer.src)
-      if (layer.effects?.length && layer.mask) urls.add(layer.mask)
+      layerUrls.add(layer.src)
+      if (layer.effects?.length && layer.mask) layerUrls.add(layer.mask)
     }
+    // Акторы (пламя, котик, кассетник) — мелкие спрайты, и их пиксельный
+    // размер держит геометрию сцены; грузим как есть.
+    const actorUrls = new Set<string>()
     for (const actor of this.spec.actors ?? []) {
-      if (actor.src) urls.add(actor.src)
-      if (actor.blinkSrc) urls.add(actor.blinkSrc)
+      if (actor.src) actorUrls.add(actor.src)
+      if (actor.blinkSrc) actorUrls.add(actor.blinkSrc)
     }
 
-    progress?.add(urls.size)
+    progress?.add(layerUrls.size + actorUrls.size)
     const textures = new Map<string, Texture>()
-    await Promise.all(
-      [...urls].map(async (url) => {
+
+    // Последовательные await складывали задержки двух десятков запросов;
+    // грузим параллельно, но с потолком одновременных ради памяти телефона.
+    const tasks: Array<() => Promise<void>> = []
+    for (const url of layerUrls) {
+      tasks.push(async () => {
+        textures.set(url, await loadLayerTexture(versioned(`${baseUrl}/${url}`), texScale))
+        progress?.tick()
+      })
+    }
+    for (const url of actorUrls) {
+      tasks.push(async () => {
         textures.set(url, await Assets.load<Texture>(versioned(`${baseUrl}/${url}`)))
         progress?.tick()
-      }),
-    )
+      })
+    }
+    await runLimited(tasks, concurrency)
 
     // Сборка — синхронно и в порядке манифеста: порядок детей root это
     // порядок параллакса, его нельзя отдавать на волю гонки загрузки.
@@ -217,7 +258,9 @@ export class LayerScene {
     const scale = Math.max(width / dw, height / dh) * (1 + this.spec.overscan)
 
     for (const layer of this.layers) {
-      layer.sprite.scale.set(scale)
+      // layerTexScale возвращает уменьшенным на телефоне слоям их экранный
+      // размер: текстура вдвое меньше — рисуем вдвое крупнее.
+      layer.sprite.scale.set(scale * this.layerTexScale)
     }
   }
 

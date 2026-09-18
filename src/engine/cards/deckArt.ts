@@ -1,6 +1,7 @@
 import { Assets, Texture } from 'pixi.js'
 
 import { versioned } from '../assetVersion'
+import { runLimited } from '../textureLoad'
 import type { LoadProgress } from '../loading'
 import type { DeckArt } from './deckAtlas'
 
@@ -34,6 +35,7 @@ export interface DeckManifest {
 export async function loadDeckArt(
   baseUrl: string,
   progress?: LoadProgress,
+  concurrency = 8,
 ): Promise<DeckArt | undefined> {
   let manifest: DeckManifest
 
@@ -62,29 +64,33 @@ export async function loadDeckArt(
     return t
   }
 
-  await Promise.all([
-    ...entries.map(async ([key, file]) => {
+  // Параллельно, но с потолком одновременных: полусотня лиц колоды таро,
+  // распакованных разом рядом со слоями сцены, давала пиковый всплеск
+  // памяти, от которого телефон ронял загрузку (§13).
+  const tasks: Array<() => Promise<void>> = entries.map(([key, file]) => async () => {
+    try {
+      faces.set(key, withMips(await Assets.load<Texture>(versioned(`${baseUrl}/${file}`))))
+    } catch {
+      // Отсутствующая картинка не должна валить всю колоду: эта карта
+      // просто останется с заглушкой, остальные нарисуются как есть.
+      console.warn(`[deck] не загрузилась иллюстрация ${key}: ${file}`)
+    } finally {
+      progress?.tick()
+    }
+  })
+  if (manifest.back) {
+    const back = manifest.back
+    tasks.push(async () => {
       try {
-        faces.set(key, withMips(await Assets.load<Texture>(versioned(`${baseUrl}/${file}`))))
+        art.back = withMips(await Assets.load<Texture>(versioned(`${baseUrl}/${back}`)))
       } catch {
-        // Отсутствующая картинка не должна валить всю колоду: эта карта
-        // просто останется с заглушкой, остальные нарисуются как есть.
-        console.warn(`[deck] не загрузилась иллюстрация ${key}: ${file}`)
+        console.warn(`[deck] не загрузилась рубашка: ${back}`)
       } finally {
         progress?.tick()
       }
-    }),
-    (async () => {
-      if (!manifest.back) return
-      try {
-        art.back = withMips(await Assets.load<Texture>(versioned(`${baseUrl}/${manifest.back}`)))
-      } catch {
-        console.warn(`[deck] не загрузилась рубашка: ${manifest.back}`)
-      } finally {
-        progress?.tick()
-      }
-    })(),
-  ])
+    })
+  }
+  await runLimited(tasks, concurrency)
 
   if (faces.size) art.faces = faces
   return art.faces || art.back ? art : undefined

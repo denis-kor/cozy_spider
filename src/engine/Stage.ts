@@ -10,6 +10,7 @@ import { Celebration } from './scene/Celebration'
 import { Ambience } from './scene/Ambience'
 import { LayerScene } from './scene/LayerScene'
 import type { RadioActor } from './scene/actors/RadioActor'
+import { detectDeviceProfile } from './deviceProfile'
 import { TIERS, TierProbe, type QualityTier } from './quality'
 
 export interface StageOptions {
@@ -74,6 +75,25 @@ export class Stage {
 
     options.host.appendChild(this.app.canvas)
 
+    // Потеря контекста: на телефоне Safari может отобрать WebGL под нехваткой
+    // памяти. По умолчанию браузер теряет его насовсем; preventDefault
+    // оставляет шанс на восстановление, а колбэк даёт приложению показать
+    // человеку, что случилось, вместо немого чёрного экрана.
+    const canvas = this.app.canvas as HTMLCanvasElement
+    canvas.addEventListener(
+      'webglcontextlost',
+      (e) => {
+        e.preventDefault()
+        console.warn('[stage] WebGL-контекст потерян (вероятно, нехватка памяти)')
+        this.onContextLost?.()
+      },
+      false,
+    )
+
+    // Профиль устройства: на телефоне уменьшаем текстуры слоёв и режем
+    // параллелизм декода — иначе Safari роняет загрузку на нехватке памяти.
+    const device = detectDeviceProfile()
+
     // Сцена и колода не зависят друг от друга и едут параллельно — как и
     // картинки внутри каждой из них. Прогресс обеих стекается в один
     // счётчик: у заставки один бегунок, а не два.
@@ -92,8 +112,11 @@ export class Stage {
 
     // Иллюстрации колоды необязательны: игра обязана запускаться без художника.
     const [, art] = await Promise.all([
-      this.scene.load(options.sceneUrl, options.commonUrl, progress),
-      options.deckUrl ? loadDeckArt(options.deckUrl, progress) : undefined,
+      this.scene.load(options.sceneUrl, options.commonUrl, progress, {
+        layerTextureScale: device.layerTextureScale,
+        loadConcurrency: device.loadConcurrency,
+      }),
+      options.deckUrl ? loadDeckArt(options.deckUrl, progress, device.loadConcurrency) : undefined,
     ])
 
     // Стартовое настроение — из манифеста сцены. У пруда это совпадает с
@@ -191,6 +214,12 @@ export class Stage {
    */
   /** Дёргается при старте торжества — приложение навешивает свою подачу. */
   onCelebrate?: (effect: 'fireworks' | 'starfall') => void
+
+  /**
+   * Дёргается при потере WebGL-контекста (на телефоне — обычно нехватка
+   * памяти). Приложение показывает человеку сообщение вместо чёрного экрана.
+   */
+  onContextLost?: () => void
 
   celebrate(): void {
     if (this.celebration.active) return

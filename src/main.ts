@@ -5,6 +5,7 @@ import { ServerAdapter } from './app/platform/server'
 import { mountRadio } from './app/radio'
 import { mountShop } from './app/shop'
 import { mountStart } from './app/start'
+import { mountViewport, requestFullscreenIfPossible } from './app/viewport'
 import { showWinPlaque } from './app/winPlaque'
 import { readLocalMetrics } from './app/track'
 import { Stage } from './engine/Stage'
@@ -28,6 +29,11 @@ async function main(): Promise<void> {
   const bootBar = boot.querySelector<HTMLElement>('.bar i')!
 
   const stage = new Stage()
+
+  // Потеря WebGL-контекста (на телефоне — обычно нехватка видеопамяти):
+  // показать человеку причину, а не немой чёрный экран.
+  stage.onContextLost = () =>
+    showFatal('Не хватило видеопамяти. Закройте другие вкладки и обновите страницу.')
 
   // Платформа — до сцены: применённый пак сверяется с энтайтлментами.
   // ServerAdapter деградирует в localStorage без сети, так что старт
@@ -76,6 +82,10 @@ async function main(): Promise<void> {
   boot.classList.add('done')
   setTimeout(() => boot.remove(), 600)
 
+  // Полный экран и корректный поворот телефона: канвас держит весь вьюпорт,
+  // а на смену ориентации ресайз подталкивается, пока iOS не устаканит размер.
+  mountViewport(stage.app)
+
   // Взводим стартовую раздачу: пока сверху висит титульный экран, вся колода
   // ждёт стопкой в правом нижнем углу. По «Играть» она разлетится по столу.
   stage.table.armDeal()
@@ -120,6 +130,9 @@ async function main(): Promise<void> {
     // Полминуты приглашающего мигания «пуска» на кассетнике — от входа в
     // игру, а не от загрузки: сцена живёт и за титульником.
     onPlay: () => {
+      // «Играть» — это жест: на телефоне/планшете можно уйти в полный экран
+      // (где браузер это умеет). На iPhone Safari метода нет — тихо мимо.
+      requestFullscreenIfPossible()
       stage.radio?.beginAttract()
       // Титул уходит — стол открывается стартовой раздачей из угла.
       stage.table.dealOutIfArmed()
@@ -175,11 +188,45 @@ async function main(): Promise<void> {
   }, 250)
 }
 
+/**
+ * Показать фатальную ошибку прямо на заставке.
+ *
+ * На телефоне консоль недоступна, а немой чёрный экран не говорит ничего.
+ * Поэтому причину пишем на самой заставке: сверху — человеческая строка,
+ * снизу мелким — техническая деталь для диагностики.
+ */
+function showFatal(message: string, detail?: string): void {
+  let boot = document.getElementById('boot')
+  if (!boot) {
+    boot = document.createElement('div')
+    boot.id = 'boot'
+    document.body.appendChild(boot)
+  }
+  boot.classList.remove('idle', 'done')
+  const label = boot.querySelector('span')
+  if (label) label.textContent = message
+  else {
+    const s = document.createElement('span')
+    s.textContent = message
+    boot.appendChild(s)
+  }
+  if (detail) {
+    let small = boot.querySelector<HTMLElement>('.boot-detail')
+    if (!small) {
+      small = document.createElement('small')
+      small.className = 'boot-detail'
+      small.style.cssText =
+        'margin-top:8px;max-width:80vw;color:#93a99b;font-size:11px;text-align:center;opacity:0.8;word-break:break-word'
+      boot.appendChild(small)
+    }
+    small.textContent = detail
+  }
+}
+
 void main().catch((err) => {
-  // Заставка остаётся на экране, но перестаёт врать, что грузится.
+  // Заставка остаётся на экране, но перестаёт врать, что грузится, и
+  // показывает саму ошибку — иначе на телефоне причину не увидеть.
   console.error(err)
-  const boot = document.getElementById('boot')
-  boot?.classList.remove('idle')
-  const label = boot?.querySelector('span')
-  if (label) label.textContent = 'не загрузилось — обнови страницу (Ctrl+F5)'
+  const detail = err instanceof Error ? err.message : String(err)
+  showFatal('Не загрузилось — обновите страницу.', detail)
 })
