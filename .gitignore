@@ -6,9 +6,16 @@ dist-assets/
 .DS_Store
 
 # локальный мусор в корне: обменные архивы и случайные картинки
+/recordings/
 /tarot/
 /*.zip
 /*.rar
 /*.png
 /*.jpg
 __pycache__/
+
+# съёмочное сырьё и хелперы записи — сотни МБ видео, в репозиторий не идут
+/posts/
+/ref_for_video/
+/record.cmd
+/record.ps1

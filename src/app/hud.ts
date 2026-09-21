@@ -19,10 +19,11 @@ export interface HudHooks {
 }
 
 export function mountHud(stage: Stage, root: HTMLElement, hooks: HudHooks = {}): void {
-  // ВРЕМЕННОЕ: кнопка мгновенной победы для отладки торжества. В деве
-  // есть всегда, на проде — по ?debug в адресе. Убрать вместе с
-  // data-debug-win ниже, когда эффекты утвердим.
-  const debugWin = import.meta.env.DEV || new URLSearchParams(location.search).has('debug')
+  // ВРЕМЕННОЕ: кнопка мгновенной победы для отладки торжества. Только в
+  // дев-сборке — на проде её быть не должно (раньше открывалась по ?debug
+  // в адресе, это лазейка на деплой-сервере). Vite вырежет ветку по DEV.
+  // Убрать вместе с data-debug-win ниже, когда эффекты утвердим.
+  const debugWin = import.meta.env.DEV
 
   root.innerHTML = `
     <div class="hud-bar hud-top">
@@ -83,7 +84,7 @@ export function mountHud(stage: Stage, root: HTMLElement, hooks: HudHooks = {}):
   stage.table.onChange = refresh
 
   q<HTMLButtonElement>('[data-new]').onclick = () => {
-    stage.table.newGame((Math.random() * 0x7fffffff) | 0)
+    stage.table.newGame()
     refresh()
   }
 

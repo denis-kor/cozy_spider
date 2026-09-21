@@ -41,12 +41,13 @@ async function main(): Promise<void> {
   const platform = new ServerAdapter()
   await platform.init()
 
-  // Дебаг-режим (?debug на проде, в деве всегда — та же логика, что у
-  // панели в hud.ts) открывает все паки: удобно смотреть сцены и колоды
-  // без покупки. Осознанно читерская ручка: паки — косметика, их ассеты
-  // и так лежат в открытую (§ PAID-PACKS), а «покупкой» это не считается —
-  // на сервер ничего не пишется, права живут до закрытия вкладки.
-  if (import.meta.env.DEV || new URLSearchParams(location.search).has('debug')) {
+  // Дев-режим открывает все паки: удобно смотреть сцены и колоды без покупки.
+  // ТОЛЬКО в дев-сборке (Vite вырежет ветку по DEV) — на проде это была бы
+  // лазейка «бесплатные платные паки по ?debug в адресе», поэтому на
+  // деплой-сервере права честные. Ассеты паков и так лежат в открытую
+  // (§ PAID-PACKS), но «покупкой» подмена не считается: на сервер ничего не
+  // пишется, права живут до закрытия вкладки.
+  if (import.meta.env.DEV) {
     const real = platform.getEntitlements.bind(platform)
     platform.getEntitlements = async () => {
       const owned = await real()
@@ -109,7 +110,7 @@ async function main(): Promise<void> {
     }, 1400)
     setTimeout(() => {
       showWinPlaque({
-        onPlayAgain: () => stage.table.newGame((Math.random() * 0x7fffffff) | 0),
+        onPlayAgain: () => stage.table.newGame(),
         onMenu: () => start?.open(),
       })
     }, 3000)
@@ -155,37 +156,59 @@ async function main(): Promise<void> {
     mountRecorder(stage)
   }
 
-  // Переключение станции — оно же смена настроения всей сцены (§7 дока).
-  const moodIds = Object.keys(MOODS)
-  let moodIndex = 0
-
+  // Единственный боевой хоткей — Ctrl+Z / Cmd+Z, отмена хода. Учитываем
+  // русскую раскладку: там на той же клавише живёт «я». preventDefault,
+  // чтобы браузер не пытался откатывать свои поля ввода.
   window.addEventListener('keydown', (e) => {
-    // Ctrl+Z / Cmd+Z — отмена хода. Учитываем русскую раскладку: там на
-    // той же клавише живёт «я». preventDefault, чтобы браузер не пытался
-    // откатывать свои поля ввода.
     if ((e.ctrlKey || e.metaKey) && ['z', 'Z', 'я', 'Я'].includes(e.key)) {
       e.preventDefault()
       stage.table.undo()
-      return
-    }
-    if (e.key === 'm' || e.key === 'ь') {
-      moodIndex = (moodIndex + 1) % moodIds.length
-      stage.ambience.setMood(moodIds[moodIndex])
-    }
-    if (e.key === 'd' || e.key === 'в') {
-      debug.classList.toggle('show')
     }
   })
 
-  setInterval(() => {
-    const a = stage.ambience
-    debug.textContent =
-      `fps      ${stage.fps.toFixed(0)}\n` +
-      `tier     ${stage.currentTier}\n` +
-      `станция  ${a.mood.id}   [M] сменить\n` +
-      `flicker  ${a.flicker.toFixed(2)}\n` +
-      `gust     ${a.gust.toFixed(2)}`
-  }, 250)
+  // Дебаг-хоткеи и панель — ТОЛЬКО в дев-сборке. Vite вырежет ветку по DEV,
+  // на деплой-сервер они не попадут. Раньше жили в проде без ограждения:
+  // случайное 1/2 подменяло игроку партию съёмочным раскладом, m тихо менял
+  // настроение всей сцены, d показывал служебную панель — обычному игроку
+  // этого быть не должно.
+  //
+  //   1/2 — съёмочные расклады под совет «чужак у дна / в середине». Цифры
+  //         в игре ни на что не завязаны и, в отличие от Ctrl+1/2 (их
+  //         браузер забирает под вкладки), надёжно доходят до страницы.
+  //   m   — переключить станцию, она же настроение всей сцены (§7 дока).
+  //   d   — панель fps/tier/flicker.
+  if (import.meta.env.DEV) {
+    const moodIds = Object.keys(MOODS)
+    let moodIndex = 0
+
+    window.addEventListener('keydown', (e) => {
+      // Пропускаем, когда фокус в поле ввода (логин по почте).
+      const typingField =
+        e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement
+      if (!typingField && (e.code === 'Digit1' || e.code === 'Digit2')) {
+        e.preventDefault()
+        stage.table.loadDemo(e.code === 'Digit1' ? 'bottom' : 'middle')
+        return
+      }
+      if (e.key === 'm' || e.key === 'ь') {
+        moodIndex = (moodIndex + 1) % moodIds.length
+        stage.ambience.setMood(moodIds[moodIndex])
+      }
+      if (e.key === 'd' || e.key === 'в') {
+        debug.classList.toggle('show')
+      }
+    })
+
+    setInterval(() => {
+      const a = stage.ambience
+      debug.textContent =
+        `fps      ${stage.fps.toFixed(0)}\n` +
+        `tier     ${stage.currentTier}\n` +
+        `станция  ${a.mood.id}   [M] сменить\n` +
+        `flicker  ${a.flicker.toFixed(2)}\n` +
+        `gust     ${a.gust.toFixed(2)}`
+    }, 250)
+  }
 }
 
 /**

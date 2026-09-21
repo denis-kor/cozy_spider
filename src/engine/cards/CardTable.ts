@@ -12,10 +12,11 @@ import {
 } from 'pixi.js'
 
 import { Game } from '../../core/game'
-import { bestMove, movableRunLength } from '../../core/rules'
+import { bestMove, movableRunLength, pickEasySeed } from '../../core/rules'
 import { COLUMNS, type Card, type GameEvent, type Move, type SuitCount } from '../../core/types'
 import { Tweener, easing } from '../anim'
 import { CardView } from './CardView'
+import { buildDemoBoard, type DemoKind } from './demoBoards'
 import {
   CARD_ASPECT,
   buildDeckAtlas,
@@ -834,12 +835,30 @@ export class CardTable {
 
   // ------------------------------------------------------------ действия
 
-  newGame(seed: number, suits: SuitCount = this.game.suits): void {
-    this.game = new Game(seed, suits)
+  newGame(seed?: number, suits: SuitCount = this.game.suits): void {
+    // Без явного сида берём «дружелюбный» для текущего числа мастей: для
+    // 2 и 4 мастей это лучший из нескольких раскладов (pickEasySeed), для
+    // 1 масти — обычный случайный. createDeal при этом не меняется,
+    // поэтому сейвы и отмена-реплеем работают как раньше.
+    this.game = new Game(seed ?? pickEasySeed(suits), suits)
     this.selected = null
     this.rebuildViews()
     // Свежий расклад всегда въезжает раздачей из угла, а не появляется разом.
     this.dealOut()
+  }
+
+  /**
+   * Секретный режим `?tips`: подставить съёмочный расклад под конкретный
+   * совет. Тот же путь, что у `undo` (rebuildViews → sync без анимации),
+   * поэтому произвольное состояние показывается корректно, без раздачи из
+   * угла (у демо-колонки много открытых карт — их разлёт бы не перевернул).
+   */
+  loadDemo(kind: DemoKind): void {
+    this.game = Game.fromState(buildDemoBoard(kind))
+    this.selected = null
+    this.dealPending = false
+    this.rebuildViews()
+    this.sync(false)
   }
 
   /**
@@ -946,7 +965,7 @@ export class CardTable {
   /** Смена числа мастей — это всегда новый расклад: колода другая. */
   setSuits(suits: SuitCount): void {
     if (suits === this.game.suits) return
-    this.newGame((Math.random() * 0x7fffffff) | 0, suits)
+    this.newGame(undefined, suits)
   }
 
   undo(): void {
@@ -958,8 +977,12 @@ export class CardTable {
 
   restart(): void {
     this.game.restart()
+    this.selected = null
     this.rebuildViews()
-    this.sync(false)
+    // Тот же расклад, но подаём его заново раздачей из угла — как «Новая
+    // игра». Через sync(false) рестарт был не виден, если ходов ещё не
+    // делали: раскладка та же, и карты просто оставались на своих местах.
+    this.dealOut()
   }
 
   /**

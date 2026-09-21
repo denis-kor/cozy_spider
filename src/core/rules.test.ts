@@ -10,6 +10,7 @@ import {
   getLegalMoves,
   isLegal,
   movableRunLength,
+  pickEasySeed,
 } from './rules'
 import type { Card, GameState, Rank, Suit, SuitCount } from './types'
 import { COLUMNS } from './types'
@@ -413,5 +414,51 @@ describe('подсказка (bestMove)', () => {
     s.stock = [[...Array(10)].map((_, i) => card('S', 5, false, 50 + i))]
 
     expect(bestMove(s)).toEqual({ t: 'deal' })
+  })
+})
+
+describe('выбор дружелюбного сида (pickEasySeed)', () => {
+  // Тот же прокси «лёгкости», что и в pickEasySeed: как далеко уходит наивный
+  // игрок, всегда делающий лучший по подсказке ход. Больше — легче.
+  const greedyProgress = (seed: number, suits: SuitCount): number => {
+    const s = createDeal(seed, suits)
+    for (let guard = 0; guard < 400; guard++) {
+      const move = bestMove(s)
+      if (!move) break
+      applyMove(s, move)
+    }
+    let buried = 0
+    for (const col of s.tableau) for (const c of col) if (!c.faceUp) buried++
+    return s.foundations.length * 1000 - buried
+  }
+
+  it('для 2 мастей берёт лучший расклад из кандидатов', () => {
+    const chosen = pickEasySeed(2, mulberry32(42))
+
+    // Повторяем ту же последовательность кандидатов и ищем argmax.
+    const r = mulberry32(42)
+    const attempts = 64
+    let bestSeed = (r() * 0x7fffffff) | 0
+    let best = greedyProgress(bestSeed, 2)
+    for (let i = 1; i < attempts; i++) {
+      const cand = (r() * 0x7fffffff) | 0
+      const score = greedyProgress(cand, 2)
+      if (score > best) {
+        best = score
+        bestSeed = cand
+      }
+    }
+
+    expect(chosen).toBe(bestSeed)
+    // И он действительно не безнадёжнее среднего случайного расклада.
+    const rr = mulberry32(42)
+    let sum = 0
+    for (let i = 0; i < attempts; i++) sum += greedyProgress((rr() * 0x7fffffff) | 0, 2)
+    expect(greedyProgress(chosen, 2)).toBeGreaterThanOrEqual(sum / attempts)
+  })
+
+  it('для 1 масти сид не перебирается — берётся первый же случайный', () => {
+    const chosen = pickEasySeed(1, mulberry32(99))
+    expect(chosen).toBe((mulberry32(99)() * 0x7fffffff) | 0)
   })
 })

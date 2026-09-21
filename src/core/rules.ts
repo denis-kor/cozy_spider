@@ -276,3 +276,62 @@ export function isWon(state: GameState): boolean {
 export function isStuck(state: GameState): boolean {
   return !isWon(state) && getLegalMoves(state).length === 0
 }
+
+/**
+ * Насколько «дружелюбен» расклад для новичка: прогоняем наивного игрока,
+ * который всегда делает лучший по подсказке ход (bestMove) и раздаёт, когда
+ * полезных ходов нет, и смотрим, как далеко он уходит. Больше — легче.
+ *
+ * Это дешёвый прокси реальной сложности: честный солвер «Паука» дорог, а
+ * жадный автопрогон по 104 крошечным картам считается за доли миллисекунды
+ * и хорошо отделяет безнадёжные раздачи от проходибельных.
+ */
+function greedyProgress(seed: number, suits: SuitCount): number {
+  const state = createDeal(seed, suits)
+  // Абсолютный предел итераций — страховка от зацикливания жадного выбора.
+  for (let guard = 0; guard < 400; guard++) {
+    const move = bestMove(state)
+    if (!move) break
+    applyMove(state, move)
+  }
+
+  let buried = 0
+  for (const col of state.tableau) for (const c of col) if (!c.faceUp) buried++
+  // Собранные связки решают; при равенстве меньше закрытых карт — дружелюбнее.
+  return state.foundations.length * 1000 - buried
+}
+
+/**
+ * Сколько раскладов перебрать при старте партии, по числу мастей. Одно
+ * число на масть — вся «сила облегчения». Масти без записи (сейчас только
+ * 1) берут обычный случайный сид.
+ */
+const EASY_ATTEMPTS: Partial<Record<SuitCount, number>> = { 2: 64, 4: 64 }
+
+/**
+ * Выбрать сид для новой партии.
+ *
+ * Для мастей из EASY_ATTEMPTS берём лучший из нескольких кандидатов по
+ * greedyProgress — расклад выходит заметно дружелюбнее. Ключевое: сама
+ * раздача (createDeal) не меняется, мы лишь выбираем удачное зерно. Поэтому
+ * сейвы {seed, suits, moves} и отмена-реплеем продолжают работать как раньше,
+ * а на арт это не влияет вовсе.
+ */
+export function pickEasySeed(suits: SuitCount, rand: () => number = Math.random): number {
+  const randSeed = (): number => (rand() * 0x7fffffff) | 0
+  const attempts = EASY_ATTEMPTS[suits] ?? 0
+
+  let seed = randSeed()
+  if (attempts <= 1) return seed
+
+  let best = greedyProgress(seed, suits)
+  for (let i = 1; i < attempts; i++) {
+    const candidate = randSeed()
+    const score = greedyProgress(candidate, suits)
+    if (score > best) {
+      best = score
+      seed = candidate
+    }
+  }
+  return seed
+}

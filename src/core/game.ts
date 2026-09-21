@@ -35,6 +35,20 @@ export class Game {
     return game
   }
 
+  /**
+   * Собрать партию из готового состояния (секретный режим `?tips`).
+   *
+   * Осознанно в обход раздачи и истории: расклад демонстрационный, заменой
+   * сейву/реплею он не является. Обычную игру это не портит — история
+   * пуста, поэтому `undo` вернёт null, а `restart` уведёт в `createDeal(0)`.
+   */
+  static fromState(state: GameState, suits: SuitCount = 4): Game {
+    const game = new Game(0, suits)
+    game.current = state
+    game.history = []
+    return game
+  }
+
   get state(): GameState {
     return this.current
   }
