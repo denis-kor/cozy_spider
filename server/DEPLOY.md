@@ -133,10 +133,17 @@ no-cache сам себя обслуживает.
 - **Redirect URI OAuth сравниваются побайтово.** Игра шлёт
   `origin + pathname` — со слэшем на конце (`https://cozyspider.ru/`).
   В кабинетах провайдеров должны быть варианты и с www, и без.
-- **VK**: доверенные redirect URL в кабинете id.vk.ru до сих пор не
-  добавлены (нужны `https://cozyspider.ru/`, `https://www.cozyspider.ru/`,
-  `http://localhost:5173`, `http://localhost:5219`) — без них кнопка
-  VK ID падает «Ошибкой загрузки». Яндекс работает.
+- **VK**: доверенные redirect URL в кабинете id.vk.ru **добавлены**
+  (Приложение → «Подключение авторизации»). Базовые домены — `cozyspider.ru`
+  и `www.cozyspider.ru`; redirect — `https://cozyspider.ru/`,
+  `https://cozyspider.ru`, `https://www.cozyspider.ru/`,
+  `https://www.cozyspider.ru`. Ключевой — `https://cozyspider.ru/`: игра
+  открывается без www и шлёт `origin + pathname` со слэшем. Пока стояли
+  только www-варианты, VK ID падал «Ошибкой загрузки» (в консоли
+  `redirect_uri is missing or invalid`). Локальные `http://localhost:*` в
+  кабинет не заведены — VK-вход в деве не поднимется, пока не добавить туда
+  актуальный дев-порт (сейчас `5273`, см. `.claude/launch.json`). Яндекс
+  работал и без этих правок.
 - **База — не в деплое.** `deploy:api` не трогает `/var/lib/cozy-api`;
   миграции схемы делаются в `index.mjs` на старте (`CREATE TABLE IF NOT
   EXISTS` + try/catch `ALTER TABLE`).
