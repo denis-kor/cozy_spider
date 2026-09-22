@@ -113,6 +113,78 @@ $env:COZY_DB = "$env:TEMP\cozy-dev.db"; $env:COZY_CATALOG = "public/assets/shop.
 
 Тестовая карта: `5555 5555 5555 4444`, любые CVC и будущая дата.
 
+## Безопасность (nginx)
+
+**Реальный IP для лимитера.** `server/index.mjs` берёт клиентский адрес из
+заголовка `X-Real-IP` — сокет за прокси всегда `127.0.0.1`, и без этого
+лимитер на авторизационных ручках вырождается в один общий счётчик на всех
+(31 запрос — и вход/регистрация/сброс отвечают 429 всем сразу). В блоке
+`location /api/` обязателен:
+
+```nginx
+location /api/ {
+    proxy_set_header X-Real-IP $remote_addr;   # НЕ $proxy_add_x_forwarded_for:
+                                               # тот склеивает XFF от клиента и подделывается
+    proxy_pass http://127.0.0.1:8787;
+}
+```
+
+Наружу торчит только nginx (Node слушает `127.0.0.1`), поэтому `X-Real-IP`,
+проставленный здесь, клиенту не подделать.
+
+**Заголовки безопасности.** В 443-блок стоит добавить (закрывают
+кликджекинг формы входа, sniffing и остаточный риск XSS):
+
+```nginx
+add_header X-Content-Type-Options "nosniff" always;
+add_header X-Frame-Options "DENY" always;
+add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+add_header Strict-Transport-Security "max-age=31536000" always;
+# CSP: разрешаем свой origin + Яндекс.Метрику; при желании ужать до nonce.
+add_header Content-Security-Policy "default-src 'self'; img-src 'self' data: https://avatars.yandex.net https://mc.yandex.ru; script-src 'self' 'unsafe-inline' https://mc.yandex.ru; connect-src 'self' https://mc.yandex.ru https://id.vk.com https://login.yandex.ru; frame-src https://mc.yandex.ru; style-src 'self' 'unsafe-inline'" always;
+```
+
+CSP выше — рабочий минимум под текущий фронт (инлайн-стили в `index.html`,
+сниппет Метрики, аватары Яндекса как `https`/`data:`). После перевода
+Метрики на строгий режим `'unsafe-inline'` в `script-src` можно убрать.
+
+**Webvisor на форме входа.** Метрика поднята с `webvisor:true` — запись
+сессии работает и на плашке почта+пароль. Поле пароля Метрика маскирует, но
+для формы входа запись лучше выключать (в интерфейсе Метрики — не писать
+формы, либо `data-*`-разметка полей).
+
+## OAuth Яндекса: известное ограничение (audience токена)
+
+**Статус: не закрыто, принято осознанно.** Вход Яндекса идёт implicit-flow
+(`response_type=token`, `oauth.ts`), а сервер проверяет токен через
+`login.yandex.ru/info`. Проблема: этот эндпоинт отдаёт пользователя по
+**любому валидному яндекс-токену**, не сверяя, какому приложению он выдан.
+То есть проверка отсекает выдуманный токен, но НЕ токен жертвы, выданный
+другому яндекс-приложению: добыв такой токен (свой OAuth-апп, утечка
+implicit-редиректа и т.п.), его можно переиграть на `POST /api/oauth` и
+войти в чужой аккаунт cozyspider. Барьер — нужен чужой валидный токен,
+поэтому это средняя, а не критичная дыра.
+
+VK этим не страдает: там PKCE + authorization code, а `user_info` вызывается
+с `client_id` — токен привязан к нашему приложению.
+
+**План закрытия (перевод Яндекса на code-flow, как у VK):**
+
+1. В кабинете `oauth.yandex.ru` у приложения включить и скопировать
+   **секрет** (client secret).
+2. Положить его в тот же systemd drop-in, что SMTP/ЮKassa:
+   `Environment=COZY_YANDEX_SECRET=...`, `chmod 600`, `daemon-reload`,
+   `restart`.
+3. Клиент (`oauth.ts`): для Яндекса запрашивать `response_type=code` вместо
+   `token`; `code` уезжает на сервер.
+4. Сервер (`/api/oauth`): для Яндекса менять `code` на токен запросом к
+   `https://oauth.yandex.ru/token` с `client_id`+`client_secret` — токен,
+   полученный по нашему секрету, гарантированно выдан нашему приложению
+   (audience привязан), дальше как сейчас `login.yandex.ru/info`.
+
+Деплой фронта и API — синхронно: без секрета на сервере вход Яндекса
+перестанет проходить, поэтому шаги 1–2 до выкладки 3–4.
+
 ## Кэш ассетов (nginx)
 
 В `/etc/nginx/sites-available/cozy-spider` две политики для `/assets/`:
@@ -127,6 +199,45 @@ $env:COZY_DB = "$env:TEMP\cozy-dev.db"; $env:COZY_CATALOG = "public/assets/shop.
 Ловушка: у тех, кто заходил ДО этого разделения, старые ассеты лежат
 с immutable до жёсткой перезагрузки (Ctrl+F5) — один раз, дальше
 no-cache сам себя обслуживает.
+
+## Короткие ссылки соцсетей (redirects)
+
+Для рекламных роликов используются короткие брендовые ссылки, которые
+редиректят на полный URL с UTM-меткой (Янд.Метрика читает источник):
+
+| Ссылка | Куда ведёт |
+|---|---|
+| `cozyspider.ru/vk/<ролик>` | `/?utm_source=vk&…&utm_content=<ролик>` |
+| `cozyspider.ru/yt/<ролик>` | `/?utm_source=youtube&…&utm_content=<ролик>` |
+| `cozyspider.ru/tt` | `/?utm_source=tiktok&…&utm_content=bio` |
+| `cozyspider.ru/ig` | `/?utm_source=instagram&…&utm_content=bio` |
+
+Правила лежат отдельным сниппетом `/etc/nginx/snippets/cozy-shortlinks.conf`
+и подключаются `include` в 443-блоке перед `location /`. Кампания зашита в
+сниппете (`utm_campaign=spider_launch`) — для новой волны роликов правь её там.
+
+Включение (идемпотентно; оригинал конфига бэкапится в `/root/cozy-spider.nginx.orig`):
+
+```bash
+ssh root@195.43.142.151 'bash -s' <<'REMOTE'
+set -e
+mkdir -p /etc/nginx/snippets
+cat > /etc/nginx/snippets/cozy-shortlinks.conf <<'CONF'
+location ~ ^/vk/([A-Za-z0-9_]+)/?$ { return 302 https://cozyspider.ru/?utm_source=vk&utm_medium=social&utm_campaign=spider_launch&utm_content=$1; }
+location ~ ^/yt/([A-Za-z0-9_]+)/?$ { return 302 https://cozyspider.ru/?utm_source=youtube&utm_medium=social&utm_campaign=spider_launch&utm_content=$1; }
+location = /tt { return 302 https://cozyspider.ru/?utm_source=tiktok&utm_medium=social&utm_campaign=spider_launch&utm_content=bio; }
+location = /ig { return 302 https://cozyspider.ru/?utm_source=instagram&utm_medium=social&utm_campaign=spider_launch&utm_content=bio; }
+CONF
+test -f /root/cozy-spider.nginx.orig || cp /etc/nginx/sites-available/cozy-spider /root/cozy-spider.nginx.orig
+grep -q 'cozy-shortlinks.conf' /etc/nginx/sites-available/cozy-spider || \
+  sed -i 's|    location / {|    include snippets/cozy-shortlinks.conf;\n\n    location / {|' /etc/nginx/sites-available/cozy-spider
+nginx -t && systemctl reload nginx && echo OK-SHORTLINKS-ON
+REMOTE
+```
+
+Проверка: `curl -sI https://cozyspider.ru/vk/spider_bit` — в ответе `location:`
+с `utm_source=vk`. Откат: удалить `include`-строку из конфига (или вернуть
+`/root/cozy-spider.nginx.orig`) и `systemctl reload nginx`.
 
 ## Ловушки
 

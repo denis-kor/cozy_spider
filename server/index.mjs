@@ -116,6 +116,10 @@ function hashPassword(password, salt = randomBytes(16)) {
   return { salt, hash: scryptSync(password, salt, 32) }
 }
 
+/** Соль для «холостого» scrypt на входе с несуществующей почтой: считаем
+ *  его всё равно, чтобы время ответа не выдавало, зарегистрирован ли адрес. */
+const DUMMY_SALT = randomBytes(16)
+
 function publicUser(u) {
   return {
     id: String(u.id),
@@ -222,13 +226,29 @@ function readBody(req) {
   })
 }
 
+/**
+ * Реальный IP клиента. За nginx сокет всегда 127.0.0.1, поэтому берём
+ * X-Real-IP — его проставляет nginx (`proxy_set_header X-Real-IP
+ * $remote_addr`, см. DEPLOY.md). Заголовок с улицы подделать нельзя:
+ * наружу торчит только nginx, а он адрес перезаписывает. Фолбэк на сокет —
+ * для локального дева без прокси.
+ */
+function clientIp(req) {
+  const fwd = req.headers['x-real-ip']
+  return (typeof fwd === 'string' && fwd.trim()) || req.socket.remoteAddress || 'unknown'
+}
+
 /** Наивный лимитер на IP для авторизационных ручек: хватает с запасом. */
 const attempts = new Map()
 function rateLimited(ip) {
-  const slot = attempts.get(ip) ?? { count: 0, since: now() }
-  if (now() - slot.since > 600) (slot.count = 0), (slot.since = now())
+  const t = now()
+  const slot = attempts.get(ip) ?? { count: 0, since: t }
+  if (t - slot.since > 600) (slot.count = 0), (slot.since = t)
   slot.count += 1
   attempts.set(ip, slot)
+  // Карта на IP, а не на один 127.0.0.1: не даём ей расти бесконечно —
+  // изредка выметаем протухшие корзины.
+  if (attempts.size > 5000) for (const [k, v] of attempts) if (t - v.since > 600) attempts.delete(k)
   return slot.count > 30
 }
 
@@ -304,7 +324,7 @@ function settlePayment(id, status) {
 
 const routes = {
   'POST /api/register': async (req, res, body) => {
-    if (rateLimited(req.socket.remoteAddress)) return json(res, 429, { error: 'Слишком много попыток — позже' })
+    if (rateLimited(clientIp(req))) return json(res, 429, { error: 'Слишком много попыток — позже' })
     const email = String(body.email ?? '').trim().toLowerCase()
     const password = String(body.password ?? '')
     if (!EMAIL_RE.test(email)) return json(res, 400, { error: 'Это не похоже на почту' })
@@ -336,7 +356,7 @@ const routes = {
   },
 
   'POST /api/confirm/resend': async (req, res) => {
-    if (rateLimited(req.socket.remoteAddress)) return json(res, 429, { error: 'Слишком много попыток — позже' })
+    if (rateLimited(clientIp(req))) return json(res, 429, { error: 'Слишком много попыток — позже' })
     const u = sessionUser(req)
     if (!u?.email || u.email_verified) return json(res, 400, { error: 'Подтверждать нечего' })
     if (!mailEnabled) return json(res, 503, { error: 'Отправка писем временно недоступна' })
@@ -345,7 +365,7 @@ const routes = {
   },
 
   'POST /api/reset/request': async (req, res, body) => {
-    if (rateLimited(req.socket.remoteAddress)) return json(res, 429, { error: 'Слишком много попыток — позже' })
+    if (rateLimited(clientIp(req))) return json(res, 429, { error: 'Слишком много попыток — позже' })
     if (!mailEnabled) return json(res, 503, { error: 'Восстановление пароля временно недоступно' })
     const email = String(body.email ?? '').trim().toLowerCase()
     if (!EMAIL_RE.test(email)) return json(res, 400, { error: 'Это не похоже на почту' })
@@ -384,11 +404,16 @@ const routes = {
   },
 
   'POST /api/login': async (req, res, body) => {
-    if (rateLimited(req.socket.remoteAddress)) return json(res, 429, { error: 'Слишком много попыток — позже' })
+    if (rateLimited(clientIp(req))) return json(res, 429, { error: 'Слишком много попыток — позже' })
     const email = String(body.email ?? '').trim().toLowerCase()
     const password = String(body.password ?? '')
     const u = db.prepare('SELECT * FROM users WHERE email = ?').get(email)
-    if (!u?.pass_hash) return json(res, 401, { error: 'Неверная почта или пароль' })
+    if (!u?.pass_hash) {
+      // Всё равно гоняем scrypt: без этого ответ на несуществующую почту
+      // приходит заметно быстрее и превращается в оракул перечисления.
+      hashPassword(password, DUMMY_SALT)
+      return json(res, 401, { error: 'Неверная почта или пароль' })
+    }
     const { hash } = hashPassword(password, u.pass_salt)
     if (!timingSafeEqual(hash, u.pass_hash)) return json(res, 401, { error: 'Неверная почта или пароль' })
     startSession(res, u.id)
@@ -396,7 +421,7 @@ const routes = {
   },
 
   'POST /api/oauth': async (req, res, body) => {
-    if (rateLimited(req.socket.remoteAddress)) return json(res, 429, { error: 'Слишком много попыток — позже' })
+    if (rateLimited(clientIp(req))) return json(res, 429, { error: 'Слишком много попыток — позже' })
     const provider = body.provider === 'vk' || body.provider === 'yandex' ? body.provider : null
     const token = String(body.accessToken ?? '')
     if (!provider || !token) return json(res, 400, { error: 'Нет токена' })
@@ -435,7 +460,10 @@ const routes = {
     const u = sessionUser(req)
     if (!u) return json(res, 401, { error: 'Нужен вход' })
     const dataUrl = String(body.dataUrl ?? '')
-    if (!dataUrl.startsWith('data:image/') || dataUrl.length > MAX_AVATAR)
+    // Только растровый data:URL в base64. SVG исключаем осознанно: он умеет
+    // нести скрипт, а аватар потом попадает в разметку профиля. Клиент и так
+    // шлёт canvas.toDataURL('image/jpeg') — под это условие он подходит.
+    if (!/^data:image\/(png|jpeg|webp);base64,/.test(dataUrl) || dataUrl.length > MAX_AVATAR)
       return json(res, 400, { error: 'Картинка не подошла' })
     db.prepare('UPDATE users SET avatar_url = ? WHERE id = ?').run(dataUrl, u.id)
     json(res, 200, { user: publicUser({ ...u, avatar_url: dataUrl }) })
@@ -473,7 +501,7 @@ const routes = {
     const u = sessionUser(req)
     if (!u) return json(res, 401, { error: 'Нужен вход' })
     if (!ykEnabled) return json(res, 503, { error: 'Оплата ещё не подключена' })
-    if (rateLimited(req.socket.remoteAddress)) return json(res, 429, { error: 'Слишком много попыток — позже' })
+    if (rateLimited(clientIp(req))) return json(res, 429, { error: 'Слишком много попыток — позже' })
     const sku = catalogSku(String(body.sku ?? ''))
     if (!sku || !(sku.price > 0)) return json(res, 400, { error: 'Нет такого товара' })
     if (db.prepare('SELECT 1 FROM entitlements WHERE user_id = ? AND sku = ?').get(u.id, sku.id))

@@ -97,7 +97,13 @@ export function mountStart(
       me.hidden = false
       meName.textContent = user.displayName ?? 'Вы вошли'
       if (user.avatarUrl) {
-        meAvatar.innerHTML = `<img src="${user.avatarUrl}" alt="">`
+        // Через свойство .src, а не innerHTML: avatarUrl приходит с сервера
+        // (аватар провайдера или свой data:URL) и в разметке подставлялся бы
+        // без экранирования. Так же безопасно делает account.ts.
+        const img = document.createElement('img')
+        img.src = user.avatarUrl
+        img.alt = ''
+        meAvatar.replaceChildren(img)
       } else {
         meAvatar.textContent = (user.displayName ?? '?').slice(0, 1).toUpperCase()
       }
