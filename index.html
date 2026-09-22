@@ -235,10 +235,26 @@
         letter-spacing: 0.06em;
       }
       .shop-price { color: #d8c9a0; }
+      /* Подпись триала: тёплая зелень вместо золота цены — читается как
+         подарок, а не ценник. Без таймера. */
+      .shop-price-trial { color: #a9c7b2; letter-spacing: 0.02em; }
       .shop-card b { font-size: 15px; }
       .shop-card p { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-dim); flex: 1; }
       .shop-card button { margin-top: 6px; }
       .shop-card .shop-noted { opacity: 1; color: #a9c7b2; }
+      /* «Оставить · цена» на триале: тихая вторичная кнопка под «Применить».
+         Пак и так открыт сегодня — путь купить виден, но не давит. */
+      .shop-keep-btn {
+        margin-top: 2px;
+        align-self: flex-start;
+        padding: 4px 0;
+        background: transparent;
+        border-color: transparent;
+        color: var(--ink-dim);
+        font-size: 12px;
+        letter-spacing: 0.03em;
+      }
+      .shop-keep-btn:hover:not(:disabled) { background: transparent; color: #d8c9a0; }
 
       .shop-note {
         margin-top: 14px;

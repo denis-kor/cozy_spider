@@ -26,6 +26,16 @@ export interface User {
 /** Идентификатор товара, например `pack.winter-cabin`. Прайс — данными. */
 export type Sku = string
 
+/**
+ * Приветственный триал: sku, открытые новому аккаунту на время, и unix-
+ * секунды, когда доступ гаснет. Не покупка — по истечении сервер просто
+ * перестаёт отдавать эти sku, и applied-пак молча падает на бесплатный.
+ */
+export interface TrialInfo {
+  skus: Sku[]
+  until: number
+}
+
 export type PurchaseResult =
   /** Куплено и энтайтлмент выдан. */
   | { status: 'ok' }
@@ -67,6 +77,12 @@ export interface PlatformAdapter {
   confirmEmail?(token: string): Promise<void>
   resendConfirmEmail?(): Promise<void>
   getEntitlements(): Promise<Set<Sku>>
+  /**
+   * Активный приветственный триал из последнего ответа getEntitlements
+   * (или null). Синхронный: читает кеш, поэтому зовётся ПОСЛЕ
+   * getEntitlements. Опционален: анонимной платформе триал ни к чему.
+   */
+  getTrial?(): TrialInfo | null
   purchase(sku: Sku): Promise<PurchaseResult>
   /**
    * Перепроверить незавершённые платежи (возврат со страницы оплаты,

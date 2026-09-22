@@ -84,12 +84,16 @@ export function mountAccount(
         fetch('/assets/shop.json', { cache: 'no-cache' }).then((r) => r.json() as Promise<Catalog>),
         adapter.getEntitlements(),
       ])
+      // Триал кешируется в getEntitlements — читаем после него.
+      const trialSkus = new Set(adapter.getTrial?.()?.skus ?? [])
       ownedEl.innerHTML = ''
       for (const sku of catalog.skus) {
         const has = owned.has(sku.id) || sku.price === 0
+        const onTrial = trialSkus.has(sku.id)
+        const rightText = onTrial ? 'первый день' : has ? '✓ в игре' : `${sku.price} ${catalog.currency}`
         const row = document.createElement('div')
         row.className = 'acct-sku' + (has ? ' acct-sku-owned' : '')
-        row.innerHTML = `<span>${sku.title}</span><span>${has ? '✓ в игре' : `${sku.price} ${catalog.currency}`}</span>`
+        row.innerHTML = `<span>${sku.title}</span><span>${rightText}</span>`
         ownedEl.appendChild(row)
       }
     } catch {

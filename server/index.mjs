@@ -37,6 +37,15 @@ const SESSION_DAYS = 180
 const MAX_BODY = 256 * 1024
 const MAX_AVATAR = 160 * 1024
 const FREE_SKUS = ['pack.pond', 'deck.pond']
+/**
+ * Приветственный триал: первый день у нового аккаунта открыт «Салон таро» —
+ * сцена и колода. Это НЕ покупка: в таблицу entitlements ничего не пишется,
+ * доступ считается на лету от users.created_at. Истекли сутки — ручка прав
+ * просто перестаёт отдавать эти sku, а клиент молча падает на бесплатный
+ * пруд (resolvePacks). Куплены игроком в течение дня — остаются навсегда.
+ */
+const TRIAL_SKUS = ['pack.tarot', 'deck.tarot']
+const TRIAL_SECONDS = 24 * 3600
 const SITE = 'https://cozyspider.ru'
 const RESET_TTL = 3600
 const CONFIRM_TTL = 7 * 86400
@@ -491,10 +500,21 @@ const routes = {
 
   'GET /api/entitlements': async (req, res) => {
     const u = sessionUser(req)
-    const skus = u
+    const owned = u
       ? db.prepare('SELECT sku FROM entitlements WHERE user_id = ?').all(u.id).map((r) => r.sku)
       : []
-    json(res, 200, { skus: [...new Set([...FREE_SKUS, ...skus])] })
+    // Приветственный триал: первый день новому аккаунту открыт «Салон таро».
+    // Считаем от created_at — в базу ничего не пишем, поэтому по истечении
+    // суток право гаснет само. То, что игрок успел купить, из fresh выпадает
+    // и остаётся в owned навсегда.
+    let trial = null
+    if (u) {
+      const until = u.created_at + TRIAL_SECONDS
+      const fresh = TRIAL_SKUS.filter((s) => !owned.includes(s))
+      if (now() < until && fresh.length) trial = { skus: fresh, until }
+    }
+    const skus = [...new Set([...FREE_SKUS, ...owned, ...(trial?.skus ?? [])])]
+    json(res, 200, { skus, trial })
   },
 
   'POST /api/purchase': async (req, res, body) => {

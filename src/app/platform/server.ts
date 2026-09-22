@@ -1,7 +1,7 @@
 import { track } from '../track'
 import { LocalAdapter } from './local'
 import { beginSignIn, completeSignIn, isConfigured } from './oauth'
-import type { PurchaseResult, SavedGame, Sku, User } from './types'
+import type { PurchaseResult, SavedGame, Sku, TrialInfo, User } from './types'
 
 /**
  * Серверная платформа: аккаунты, аватары, энтайтлменты и сейвы живут в
@@ -32,6 +32,8 @@ async function api<T>(method: string, path: string, body?: unknown): Promise<T> 
 
 export class ServerAdapter extends LocalAdapter {
   private user: User | null = null
+  /** Триал из последнего /api/entitlements — лавка читает его синхронно. */
+  private trial: TrialInfo | null = null
 
   async init(): Promise<void> {
     await super.init()
@@ -172,12 +174,21 @@ export class ServerAdapter extends LocalAdapter {
   async getEntitlements(): Promise<Set<Sku>> {
     const local = await super.getEntitlements()
     try {
-      const r = await api<{ skus: Sku[] }>('GET', '/api/entitlements')
+      const r = await api<{ skus: Sku[]; trial?: TrialInfo | null }>('GET', '/api/entitlements')
       for (const sku of r.skus) local.add(sku)
+      this.trial = r.trial ?? null
     } catch {
-      // Офлайн: остаёмся на локальном списке.
+      // Офлайн: остаёмся на локальном списке. Триал сбрасываем — по
+      // устаревшему кешу нельзя рисовать «первый день бесплатно» над кнопкой
+      // «Купить»: в local триальных sku уже нет, инвариант onTrial⇒usable
+      // сломался бы. Инвариант: триал не null только при удачном запросе.
+      this.trial = null
     }
     return local
+  }
+
+  getTrial(): TrialInfo | null {
+    return this.trial
   }
 
   async loadSave(): Promise<SavedGame | null> {

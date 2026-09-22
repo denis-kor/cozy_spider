@@ -67,67 +67,95 @@ export function mountShop(root: HTMLElement, adapter: PlatformAdapter, hooks: Sh
       fetch('/assets/shop.json', { cache: 'no-cache' }).then((r) => r.json() as Promise<Catalog>),
       adapter.getEntitlements(),
     ])
+    // Триал доступен только после getEntitlements — он его и кеширует.
+    const trialSkus = new Set(adapter.getTrial?.()?.skus ?? [])
 
     list.innerHTML = ''
     for (const sku of catalog.skus) {
       const card = document.createElement('div')
       card.className = 'shop-card'
 
-      const price = sku.price === 0 ? 'бесплатно' : `${sku.price} ${catalog.currency}`
-      const has = owned.has(sku.id) || sku.price === 0
+      // Триал ≠ покупка. `usable` — можно применить прямо сейчас (куплено,
+      // бесплатно или открыто на первый день). `owns` — принадлежит навсегда.
+      // Их нельзя смешивать: иначе триальный пак прикинулся бы купленным и
+      // спрятал кнопку покупки ровно в тот день, когда игрок им любуется.
+      const onTrial = trialSkus.has(sku.id)
+      const owns = sku.price === 0 || (owned.has(sku.id) && !onTrial)
+      const usable = owns || onTrial
+      // Подпись-ценник: на триале — тихое «первый день бесплатно» без
+      // таймера; настоящую цену игрок всё равно увидит на кнопке «Оставить».
+      const priceTag = sku.price === 0 ? 'бесплатно' : onTrial ? 'первый день бесплатно' : `${sku.price} ${catalog.currency}`
+      const realPrice = `${sku.price} ${catalog.currency}`
 
       card.innerHTML = `
         <div class="shop-card-top">
           <span class="shop-kind">${KIND_LABEL[sku.kind]}</span>
-          <span class="shop-price">${price}</span>
+          <span class="shop-price${onTrial ? ' shop-price-trial' : ''}">${priceTag}</span>
         </div>
         <b>${sku.title}</b>
         <p>${sku.desc}</p>
       `
 
-      const action = document.createElement('button')
-      if (has) {
-        // Купленный (или бесплатный) пак не «в игре» сам по себе — его
-        // ещё надо применить. Смена сцены/колоды — перезагрузка (§ PAID-PACKS):
-        // выгружать и грузить все текстуры Pixi вживую не стоит того.
+      // Полный поток покупки на любой кнопке: fake-door, вход, редирект кассы.
+      const wireBuy = (btn: HTMLButtonElement): void => {
+        btn.onclick = async () => {
+          btn.disabled = true
+          const result = await adapter.purchase(sku.id)
+          if (result.status === 'unavailable') {
+            // Честный ответ fake-door: намерение записано, денег не взяли.
+            btn.textContent = 'Готовится — спасибо за интерес!'
+            btn.classList.add('shop-noted')
+          } else if (result.status === 'signin-required') {
+            // Покупка живёт в аккаунте — иначе её не перенести на другое
+            // устройство и не вернуть после чистки браузера. Кнопка сама
+            // ведёт ко входу: «идите в меню» тестеры читали как тупик.
+            btn.textContent = 'Войти и купить'
+            btn.disabled = false
+            btn.onclick = () => {
+              close()
+              hooks.onSignIn?.()
+            }
+          } else if (result.status === 'ok') {
+            btn.textContent = 'В игре'
+          } else {
+            btn.disabled = false
+          }
+        }
+      }
+
+      // Применить — когда пак доступен сейчас. Купленный/бесплатный пак не «в
+      // игре» сам по себе, его надо применить; смена сцены/колоды —
+      // перезагрузка (§ PAID-PACKS): выгружать текстуры Pixi вживую не стоит.
+      if (usable) {
+        const apply = document.createElement('button')
         if (isApplied(sku.kind, sku.id)) {
-          action.textContent = 'Применено ✓'
-          action.disabled = true
+          apply.textContent = 'Применено ✓'
+          apply.disabled = true
         } else {
-          action.textContent = 'Применить'
-          action.onclick = () => {
+          apply.textContent = 'Применить'
+          apply.onclick = () => {
             applyPack(sku.kind, sku.id)
             track('pack_apply', { sku: sku.id })
             location.reload()
           }
         }
-      } else {
-        action.textContent = `Купить · ${price}`
-        action.onclick = async () => {
-          action.disabled = true
-          const result = await adapter.purchase(sku.id)
-          if (result.status === 'unavailable') {
-            // Честный ответ fake-door: намерение записано, денег не взяли.
-            action.textContent = 'Готовится — спасибо за интерес!'
-            action.classList.add('shop-noted')
-          } else if (result.status === 'signin-required') {
-            // Покупка живёт в аккаунте — иначе её не перенести на другое
-            // устройство и не вернуть после чистки браузера. Кнопка сама
-            // ведёт ко входу: «идите в меню» тестеры читали как тупик.
-            action.textContent = 'Войти и купить'
-            action.disabled = false
-            action.onclick = () => {
-              close()
-              hooks.onSignIn?.()
-            }
-          } else if (result.status === 'ok') {
-            action.textContent = 'В игре'
-          } else {
-            action.disabled = false
-          }
-        }
+        card.appendChild(apply)
       }
-      card.appendChild(action)
+
+      // Купить — пока пак не принадлежит навсегда. На триале это тихая
+      // вторичная «Оставить»: давить незачем, пак и так открыт сегодня, но
+      // путь оставить его себе обязан быть виден именно в этот день.
+      if (!owns && sku.price > 0) {
+        const buy = document.createElement('button')
+        if (onTrial) {
+          buy.className = 'shop-keep-btn'
+          buy.textContent = `Оставить · ${realPrice}`
+        } else {
+          buy.textContent = `Купить · ${realPrice}`
+        }
+        wireBuy(buy)
+        card.appendChild(buy)
+      }
 
       // «Посмотреть колоду» — витрина карт до покупки. Показываем только у
       // тех паков, у кого в каталоге есть картинка-превью.
