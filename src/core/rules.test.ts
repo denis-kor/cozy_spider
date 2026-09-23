@@ -457,8 +457,22 @@ describe('выбор дружелюбного сида (pickEasySeed)', () => {
     expect(greedyProgress(chosen, 2)).toBeGreaterThanOrEqual(sum / attempts)
   })
 
-  it('для 1 масти сид не перебирается — берётся первый же случайный', () => {
+  it('для 1 масти тоже берёт лучший расклад из кандидатов', () => {
     const chosen = pickEasySeed(1, mulberry32(99))
-    expect(chosen).toBe((mulberry32(99)() * 0x7fffffff) | 0)
+
+    // Повторяем ту же последовательность кандидатов и ищем argmax.
+    const r = mulberry32(99)
+    const attempts = 64
+    let bestSeed = (r() * 0x7fffffff) | 0
+    let best = greedyProgress(bestSeed, 1)
+    for (let i = 1; i < attempts; i++) {
+      const cand = (r() * 0x7fffffff) | 0
+      const score = greedyProgress(cand, 1)
+      if (score > best) {
+        best = score
+        bestSeed = cand
+      }
+    }
+    expect(chosen).toBe(bestSeed)
   })
 })

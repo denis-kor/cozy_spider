@@ -1,6 +1,7 @@
 import { Application, Container, RenderTexture } from 'pixi.js'
 
 import { Game } from '../core/game'
+import { pickEasySeed } from '../core/rules'
 import type { SuitCount } from '../core/types'
 import { CardTable } from './cards/CardTable'
 import { loadDeckArt } from './cards/deckArt'
@@ -128,7 +129,10 @@ export class Stage {
     // (dailySeed) остаётся отдельной фишкой и должен включаться явно:
     // молчаливый дневной сид на старте выглядит как сломанный рандом —
     // весь день одна и та же раздача.
-    const game = new Game(options.seed ?? ((Math.random() * 0x7fffffff) | 0), options.suits ?? 1)
+    const suits = options.suits ?? 1
+    // Стартовый расклад тоже облегчаем: без явного сида берём «дружелюбный»
+    // (pickEasySeed), иначе самая первая партия шла бы мимо облегчения.
+    const game = new Game(options.seed ?? pickEasySeed(suits), suits)
     this.table = new CardTable(game, {
       renderer: this.app.renderer,
       locale: 'en',
