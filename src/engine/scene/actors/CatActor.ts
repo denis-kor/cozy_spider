@@ -70,6 +70,14 @@ export class CatActor {
   private baseH = 0
   private diveScreen = 0
 
+  // Победное всплытие (только у пруда): котик высовывается из воды выше
+  // обычного, подмигивает и ныряет обратно. Пока идёт — обычный цикл выключен,
+  // но маска воды и отражение остаются: вид родной, ничего не обрезано лишнего.
+  private celebrating = false
+  private celebTime = 0
+  private celebDone?: () => void
+  private celebStartY = 0
+
   constructor(
     readonly spec: ActorSpec,
     open: Texture,
@@ -171,6 +179,11 @@ export class CatActor {
   private localWater = 0
 
   update(dt: number): void {
+    if (this.celebrating) {
+      this.updateCelebration(dt)
+      return
+    }
+
     this.time += dt
     this.phaseTime += dt
 
@@ -243,6 +256,81 @@ export class CatActor {
   surfaceNow(): void {
     this.enter('surfaced', this.pick(SURFACED_RANGE))
     this.rise = 1
+  }
+
+  /** Умеет ли эта сцена победный прыжок (флаг в данных сцены). */
+  get canCelebrate(): boolean {
+    return this.spec.winJump === true
+  }
+
+  /**
+   * Финал победы: котик высовывается из воды выше обычного, мягко подмигивает
+   * и ныряет обратно. `onDone` — когда нырнул (по нему показывается плашка
+   * «Поздравляем»).
+   */
+  celebrate(onDone?: () => void): void {
+    if (this.celebrating) return
+    this.celebrating = true
+    this.celebTime = 0
+    this.celebDone = onDone
+    // Всплываем плавно с текущей высоты — без рывка. Маска воды и отражение
+    // остаются на месте: котик высовывается в родной воде, ничего не режется.
+    this.celebStartY = this.sprite.y
+    this.sprite.texture = this.open
+  }
+
+  private updateCelebration(dt: number): void {
+    this.celebTime += dt
+    this.time += dt
+    const t = this.celebTime
+
+    const RISE = 0.9 // всплыл выше обычного
+    const HOLD = 2.1 // замер и подмигнул
+    const SINK = 3.0 // нырнул обратно
+
+    // Пик: выше обычного всплытия (у полного всплытия y ≈ 0). Не больше ~0.39
+    // высоты головы — иначе нижняя кромка спрайта выйдет из-под воды.
+    const peakY = -this.baseH * 0.3
+
+    let target: number
+    if (t < RISE) {
+      const e = 1 - Math.pow(1 - t / RISE, 3) // плавно вверх
+      target = this.celebStartY + (peakY - this.celebStartY) * e
+      this.sprite.texture = this.open
+    } else if (t < HOLD) {
+      const h = t - RISE
+      target = peakY
+      // мягкое подмигивание в середине паузы
+      this.sprite.texture = h > 0.5 && h < 0.9 ? this.blink : this.open
+    } else if (t < SINK) {
+      const k = (t - HOLD) / (SINK - HOLD)
+      target = peakY + (this.diveScreen - peakY) * (k * k) // плавно вниз, под воду
+      this.sprite.texture = this.open
+    } else {
+      this.endCelebration()
+      return
+    }
+
+    const bob = Math.sin(this.time * 1.1) * this.baseH * 0.012
+    this.sprite.y = target + bob
+
+    // Отражение и волнистая кромка — как в обычном режиме: вид родной.
+    const above = this.localWater - this.sprite.y
+    this.mirror.y = this.localWater + above * 0.55 + Math.sin(this.time * 1.7) * this.baseH * 0.008
+    this.mirror.alpha = this.spec.mirror === false ? 0 : 0.24
+    const drift = Math.sin(this.time * 0.23) * this.baseW * 0.5
+    this.clip.x = drift
+    this.mirrorClip.x = drift
+  }
+
+  private endCelebration(): void {
+    this.celebrating = false
+    // Вернуться к обычному циклу — если игрок останется в сцене.
+    this.enter('hidden', this.pick(HIDDEN_RANGE))
+    this.rise = 0
+    const done = this.celebDone
+    this.celebDone = undefined
+    done?.()
   }
 
   get state(): { phase: Phase; rise: number } {

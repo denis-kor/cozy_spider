@@ -108,12 +108,15 @@ async function main(): Promise<void> {
       document.body.appendChild(flash)
       setTimeout(() => flash.remove(), 2600)
     }, 1400)
-    setTimeout(() => {
-      showWinPlaque({
-        onPlayAgain: () => stage.table.newGame(),
-        onMenu: () => start?.open(),
-      })
-    }, 3000)
+  }
+  // Плашку показывает Stage в свой момент: у пруда — когда котик ускакал за
+  // кадр, у прочих сцен — по таймеру после всплытия котика.
+  stage.onFinale = () => {
+    showWinPlaque({
+      // Без явного сида: newGame сам возьмёт «дружелюбный» расклад.
+      onPlayAgain: () => stage.table.newGame(),
+      onMenu: () => start?.open(),
+    })
   }
 
   mountHud(stage, hud, { onShop: () => shop?.open(), onMenu: () => start?.open() })

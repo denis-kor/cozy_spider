@@ -6,21 +6,29 @@
       "kind": "scene",
       "title": "Пруд под дождём",
       "desc": "Керосинка, кот в кувшинках, дождь по воде и лофай-радио. Стартовая сцена — бесплатно, навсегда.",
-      "price": 0
+      "price": 0,
+      "thumb": "/assets/scene/pond/preview.webp",
+      "preview": "/assets/scene/pond/full.webp"
     },
     {
       "id": "deck.pond",
       "kind": "deck",
       "title": "Колода пруда",
       "desc": "Родная колода: маленькие пейзажи в дождливой сини. Бесплатно, навсегда.",
-      "price": 0
+      "price": 0,
+      "deck": "/assets/deck",
+      "fan": ["back", "C13", "H12", "D11", "S13"],
+      "cards": ["C11", "C12", "C13", "D11", "D12", "D13", "H11", "H12", "H13", "S11", "S12", "S13"],
+      "preview": "/assets/deck/preview.webp"
     },
     {
       "id": "pack.tarot",
       "kind": "scene",
       "title": "Салон таро",
       "desc": "Свеча, хрустальный шар и звёздное небо за занавесью. Ночная синь, старое золото и радио гадалки.",
-      "price": 199
+      "price": 199,
+      "thumb": "/assets/scene/tarot/preview.webp",
+      "preview": "/assets/scene/tarot/full.webp"
     },
     {
       "id": "deck.tarot",
@@ -28,6 +36,9 @@
       "title": "Звёздное таро",
       "desc": "Все 52 карты нарисованы: мечи, кубки, пентакли и жезлы в ночной сини с золотом.",
       "price": 199,
+      "deck": "/assets/deck-tarot",
+      "fan": ["back", "C1", "H12", "D13", "S11"],
+      "cards": ["S1", "H1", "D1", "C1", "S13", "H13", "D13", "C13", "S12", "H12", "D12", "C12"],
       "preview": "/assets/deck-tarot/preview.webp"
     }
   ]

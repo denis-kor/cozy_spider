@@ -253,7 +253,8 @@
       "parallax": 0.16,
       "waterline": 1002,
       "diveDepth": 115,
-      "after": "06-lilypads"
+      "after": "06-lilypads",
+      "winJump": true
     },
     {
       "id": "radio",

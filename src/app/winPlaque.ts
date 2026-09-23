@@ -19,8 +19,8 @@ export function showWinPlaque(actions: WinPlaqueActions): void {
   const el = document.createElement('div')
   el.className = 'win-plaque'
   el.innerHTML = `
-    <div class="win-plaque-title">Собрано!</div>
-    <div class="win-plaque-sub">пасьянс сошёлся</div>
+    <div class="win-plaque-title">Поздравляем!</div>
+    <div class="win-plaque-sub">ваш пасьянс сошёлся</div>
     <div class="win-plaque-row">
       <button data-again>Играть дальше</button>
       <button data-menu>Меню</button>

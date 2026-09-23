@@ -225,11 +225,26 @@ export class Stage {
    */
   onContextLost?: () => void
 
+  /**
+   * Дёргается, когда торжество можно закрыть плашкой «Поздравляем»: у пруда —
+   * после того как котик ускакал за кадр, у прочих сцен — по таймеру.
+   */
+  onFinale?: () => void
+
   celebrate(): void {
     if (this.celebration.active) return
     const effect = this.scene.sceneSpec.win ?? 'fireworks'
+    const cat = this.scene.actor('cat')?.cat
     this.celebration.start(effect, () => {
-      this.scene.actor('cat')?.cat?.surfaceNow()
+      if (cat?.canCelebrate) {
+        // Пруд: котик высовывается из воды выше обычного, подмигивает и ныряет;
+        // плашку показываем, когда он нырнул обратно.
+        cat.celebrate(() => this.onFinale?.())
+      } else {
+        // Прочие сцены: котик просто выныривает, плашка — по таймеру.
+        cat?.surfaceNow()
+        setTimeout(() => this.onFinale?.(), 1500)
+      }
     })
     this.onCelebrate?.(effect)
   }
