@@ -10,6 +10,7 @@
         --ink-dim: #93a99b;
         --panel: rgba(12, 24, 20, 0.62);
         --edge: rgba(216, 201, 160, 0.16);
+        --edge-strong: rgba(216, 201, 160, 0.42);
       }
 
       html, body {
@@ -186,7 +187,7 @@
       .shop-overlay.over-start { z-index: 40; }
 
       .shop-panel {
-        width: min(680px, calc(100vw - 32px));
+        width: min(720px, calc(100vw - 32px));
         max-height: calc(100vh - 64px);
         overflow-y: auto;
         background: rgba(14, 26, 22, 0.92);
@@ -197,40 +198,161 @@
       }
 
       .shop-head {
+        position: relative;
         display: flex;
         align-items: center;
-        justify-content: space-between;
+        justify-content: center;
         margin-bottom: 14px;
       }
       .shop-title { font-size: 21px; letter-spacing: 0.04em; }
-      .shop-close { padding: 4px 10px; }
+      .shop-close { position: absolute; right: 0; padding: 4px 10px; }
 
       .shop-list {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
-        gap: 12px;
+        grid-template-columns: 1fr 1fr;
+        gap: 14px;
+        align-items: start;
+      }
+      .shop-col { display: flex; flex-direction: column; gap: 12px; }
+      .shop-col-head {
+        margin: 0 2px 1px;
+        font-size: 11px;
+        font-weight: 400;
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: var(--ink-dim);
+      }
+      @media (max-width: 480px) {
+        .shop-list { grid-template-columns: 1fr; }
       }
 
       .shop-card {
         display: flex;
         flex-direction: column;
-        gap: 6px;
         background: rgba(255, 255, 255, 0.045);
         border: 1px solid var(--edge);
         border-radius: 12px;
-        padding: 12px;
+        overflow: hidden;
       }
-      .shop-card-top {
+      /* «Сейчас в игре» — тёплый кант вместо слова. */
+      .shop-active {
+        border-color: var(--edge-strong);
+        box-shadow: inset 0 0 0 1px var(--edge-strong), 0 0 22px rgba(216, 201, 160, 0.1);
+      }
+
+      /* Миниатюра-витрина: у сцены — баннер, у колоды — веер настоящих карт. */
+      .shop-thumb {
+        position: relative;
+        height: 168px;
+        overflow: hidden;
+        background: radial-gradient(120% 120% at 70% 20%, #22332b, #0e1613);
+      }
+      .shop-scene {
+        display: block;
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        object-position: center 42%;
+        transition: transform 0.35s ease;
+      }
+      /* Миниатюру можно тапнуть — крупный просмотр. Ненавязчивая подсказка. */
+      .shop-thumb-tap { cursor: pointer; }
+      .shop-thumb-tap:hover .shop-scene { transform: scale(1.03); }
+      .shop-thumb-tap:hover .shop-peek { background: rgba(8, 16, 13, 0.72); border-color: var(--edge-strong); }
+      .shop-fan {
+        position: absolute;
+        inset: 0;
         display: flex;
-        justify-content: space-between;
-        font-size: 11px;
-        color: var(--ink-dim);
-        letter-spacing: 0.06em;
+        align-items: center;
+        justify-content: center;
       }
-      .shop-price { color: #d8c9a0; }
-      .shop-card b { font-size: 15px; }
-      .shop-card p { margin: 0; font-size: 12px; line-height: 1.45; color: var(--ink-dim); flex: 1; }
-      .shop-card button { margin-top: 6px; }
+      .shop-fan img {
+        position: absolute;
+        width: 70px;
+        aspect-ratio: 512 / 742;
+        object-fit: cover;
+        border-radius: 6px;
+        border: 1px solid rgba(255, 255, 255, 0.14);
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.5);
+        background: #1a2620;
+      }
+      /* Значки поверх миниатюры — визуальные, вместо текстовых бейджей. */
+      .shop-medallion {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        background: rgba(169, 199, 178, 0.92);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+      }
+      .shop-medallion svg {
+        width: 15px;
+        height: 15px;
+        stroke: #0d1512;
+        stroke-width: 2.8;
+        fill: none;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+      .shop-peek {
+        position: absolute;
+        top: 10px;
+        left: 10px;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        border-radius: 50%;
+        background: rgba(8, 16, 13, 0.5);
+        border: 1px solid var(--edge);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(4px);
+      }
+      .shop-peek svg {
+        width: 15px;
+        height: 15px;
+        stroke: var(--ink);
+        stroke-width: 2;
+        fill: none;
+        stroke-linecap: round;
+      }
+      .shop-peek:hover { background: rgba(8, 16, 13, 0.72); border-color: var(--edge-strong); }
+      .shop-pricetag {
+        position: absolute;
+        left: 10px;
+        bottom: 10px;
+        font-size: 14px;
+        color: #f0e7cf;
+        background: rgba(8, 16, 13, 0.58);
+        border: 1px solid var(--edge);
+        border-radius: 20px;
+        padding: 3px 12px;
+        backdrop-filter: blur(4px);
+      }
+
+      .shop-body {
+        display: flex;
+        flex-direction: column;
+        gap: 5px;
+        padding: 12px 13px 13px;
+        flex: 1;
+      }
+      .shop-body b { font-size: 16px; }
+      /* Место под кнопку зарезервировано всегда — высота карточки не «прыгает»
+         от наличия «Применить»/«Купить» (у активного пака кнопки нет). */
+      .shop-actions { display: flex; align-items: center; gap: 10px; margin-top: 10px; min-height: 36px; }
+      .shop-buy {
+        color: #f0e7cf;
+        background: rgba(216, 201, 160, 0.18);
+        border-color: var(--edge-strong);
+      }
+      .shop-buy:hover:not(:disabled) { background: rgba(216, 201, 160, 0.28); }
       .shop-card .shop-noted { opacity: 1; color: #a9c7b2; }
 
       .shop-note {
@@ -244,9 +366,7 @@
 
       /* «Посмотреть колоду»: вторичная, тихая кнопка под основным действием. */
       .shop-preview-btn {
-        margin-top: 2px;
-        align-self: flex-start;
-        padding: 4px 0;
+        padding: 4px 2px;
         background: transparent;
         border-color: transparent;
         color: var(--ink-dim);
@@ -284,12 +404,48 @@
         gap: 10px;
         cursor: default;
       }
-      .shop-lightbox-fig img {
+      /* Раскрытие колоды: карты выкладываются по одной и «распахиваются». */
+      .shop-lightbox-cards {
+        display: grid;
+        grid-template-columns: repeat(6, 1fr);
+        gap: 12px;
+        width: min(760px, 92vw);
+        perspective: 1400px;
+      }
+      .shop-lb-card {
+        width: 100%;
+        aspect-ratio: 512 / 742;
+        object-fit: cover;
+        border-radius: 8px;
+        border: 1px solid var(--edge);
+        box-shadow: 0 14px 30px rgba(0, 0, 0, 0.5);
+        background: #182420;
+        opacity: 0;
+        transform: rotateY(-78deg) translateY(10px);
+        transform-origin: left center;
+        transition: opacity 0.5s ease, transform 0.55s cubic-bezier(0.2, 0.8, 0.25, 1);
+      }
+      .shop-lightbox.show .shop-lb-card { opacity: 1; transform: none; }
+      @media (prefers-reduced-motion: reduce) {
+        .shop-lb-card { transition-duration: 0.01ms; transition-delay: 0ms !important; }
+      }
+      /* Одиночная картинка (крупная сцена): без сетки, строго по центру. */
+      .shop-lightbox-solo {
+        display: flex;
+        width: auto;
+        justify-content: center;
+        perspective: none;
+      }
+      .shop-lb-single {
+        display: block;
         max-width: min(94vw, 1120px);
         max-height: 84vh;
         border-radius: 12px;
         border: 1px solid var(--edge);
         box-shadow: 0 24px 60px rgba(0, 0, 0, 0.55);
+      }
+      @media (max-width: 620px) {
+        .shop-lightbox-cards { grid-template-columns: repeat(4, 1fr); width: min(420px, 92vw); }
       }
       .shop-lightbox-fig figcaption {
         font-size: 14px;

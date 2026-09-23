@@ -76,8 +76,9 @@ export function mountHud(stage: Stage, root: HTMLElement, hooks: HudHooks = {}):
   function refresh(): void {
     undoBtn.disabled = !stage.table.game.canUndo
 
-    if (stage.table.game.won()) say('Собрано! 🎉')
-    else if (stage.table.game.stuck()) say('Ходов больше нет')
+    // Победу показывает плашка (winPlaque) поверх финального эффекта — без
+    // маленького тоста: две «собрано» подряд читались как дубль.
+    if (stage.table.game.stuck()) say('Ходов больше нет')
   }
 
   stage.table.onChange = refresh
@@ -108,7 +109,6 @@ export function mountHud(stage: Stage, root: HTMLElement, hooks: HudHooks = {}):
   if (debugWin) {
     q<HTMLButtonElement>('[data-debug-win]').onclick = () => {
       stage.celebrate()
-      say('Собрано! 🎉')
     }
   }
 

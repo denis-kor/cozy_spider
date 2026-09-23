@@ -548,7 +548,10 @@ export class CardTable {
     const column = this.columnAt(local.x)
     const l = this.layout
 
-    if (local.y > this.viewH - l.bottomBar) return null
+    // Никакого сплошного отказа для нижней полосы (viewH - bottomBar): при
+    // 4 мастях длинная колонна уезжает в неё, и её нижние карты обязаны
+    // браться. Попадание считаем по реальным прямоугольникам карт ниже —
+    // пустой лоток вернёт null сам, а запас ловится раньше, в onPointerDown.
     if (Math.abs(local.x - (l.originX + column * l.columnStep)) > l.cardW * 0.55) return null
 
     const cards = this.game.state.tableau[column]
