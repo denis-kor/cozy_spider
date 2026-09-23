@@ -13,7 +13,9 @@
 | [README.md](README.md) | запуск, команды, структура |
 | [art/scene/pond/SLICING.md](art/scene/pond/SLICING.md) | как режется фон на слои |
 | [art/deck/DECK-AND-CAT.md](art/deck/DECK-AND-CAT.md) | что генерировать для колоды и котика |
+| [art/deck/SHEET-METHOD.md](art/deck/SHEET-METHOD.md) | инструкция для генерации колоды листами: размеры, промпты, приёмка |
 | [art/NEXT-SESSION.md](art/NEXT-SESSION.md) | текущее задание на генерацию |
+| [art/VIDEO-CHARACTERS.md](art/VIDEO-CHARACTERS.md) | маскоты для роликов: котик и паук, промпты и порядок генерации |
 | [server/DEPLOY.md](server/DEPLOY.md) | прод: VPS, деплой фронта и API, диагностика, SMTP, ловушки OAuth |
 | [art/PAID-PACKS.md](art/PAID-PACKS.md) | платные паки: новая сцена/колода, генерация на GPU-машине, энтайтлменты и привязка к аккаунту |
 

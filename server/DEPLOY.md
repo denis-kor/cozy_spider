@@ -211,6 +211,8 @@ no-cache сам себя обслуживает.
 | `cozyspider.ru/yt/<ролик>` | `/?utm_source=youtube&…&utm_content=<ролик>` |
 | `cozyspider.ru/tt` | `/?utm_source=tiktok&…&utm_content=bio` |
 | `cozyspider.ru/ig` | `/?utm_source=instagram&…&utm_content=bio` |
+| `cozyspider.ru/dzen` | `/?utm_source=dzen&…&utm_content=article` |
+| `cozyspider.ru/dzen/<статья>` | `/?utm_source=dzen&…&utm_content=<статья>` |
 
 Правила лежат отдельным сниппетом `/etc/nginx/snippets/cozy-shortlinks.conf`
 и подключаются `include` в 443-блоке перед `location /`. Кампания зашита в
@@ -227,6 +229,8 @@ location ~ ^/vk/([A-Za-z0-9_]+)/?$ { return 302 https://cozyspider.ru/?utm_sourc
 location ~ ^/yt/([A-Za-z0-9_]+)/?$ { return 302 https://cozyspider.ru/?utm_source=youtube&utm_medium=social&utm_campaign=spider_launch&utm_content=$1; }
 location = /tt { return 302 https://cozyspider.ru/?utm_source=tiktok&utm_medium=social&utm_campaign=spider_launch&utm_content=bio; }
 location = /ig { return 302 https://cozyspider.ru/?utm_source=instagram&utm_medium=social&utm_campaign=spider_launch&utm_content=bio; }
+location = /dzen { return 302 https://cozyspider.ru/?utm_source=dzen&utm_medium=social&utm_campaign=spider_launch&utm_content=article; }
+location ~ ^/dzen/([A-Za-z0-9_]+)/?$ { return 302 https://cozyspider.ru/?utm_source=dzen&utm_medium=social&utm_campaign=spider_launch&utm_content=$1; }
 CONF
 test -f /root/cozy-spider.nginx.orig || cp /etc/nginx/sites-available/cozy-spider /root/cozy-spider.nginx.orig
 grep -q 'cozy-shortlinks.conf' /etc/nginx/sites-available/cozy-spider || \
