@@ -1,4 +1,5 @@
 import type { PlatformAdapter, Sku, User } from './platform/types'
+import { trialLeft } from './shop'
 import { track } from './track'
 
 /**
@@ -90,7 +91,12 @@ export function mountAccount(
       for (const sku of catalog.skus) {
         const has = owned.has(sku.id) || sku.price === 0
         const onTrial = trialSkus.has(sku.id)
-        const rightText = onTrial ? 'первый день' : has ? '✓ в игре' : `${sku.price} ${catalog.currency}`
+        // На триале вместо цены — сколько осталось от приветственного часа:
+        // у витрины и профиля не должно быть двух мнений о том, что сейчас
+        // открыто и надолго ли.
+        const rightText = onTrial
+          ? trialLeft(adapter.getTrial?.()?.until)
+          : has ? '✓ в игре' : `${sku.price} ${catalog.currency}`
         const row = document.createElement('div')
         row.className = 'acct-sku' + (has ? ' acct-sku-owned' : '')
         row.innerHTML = `<span>${sku.title}</span><span>${rightText}</span>`

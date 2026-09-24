@@ -13,6 +13,21 @@ import { track } from './track'
  * этот файл не изменится ни строчкой.
  */
 
+/**
+ * Остаток приветственного часа человеческим текстом.
+ *
+ * Пока триал длился сутки, хватало статичной подписи «первый день
+ * бесплатно». На часе она стала бы враньём: у игрока может остаться три
+ * минуты, а надпись обещает час. Таймер не заводим — строка считается в
+ * момент отрисовки, а лавку и профиль и так перерисовывают при открытии.
+ */
+export function trialLeft(until?: number): string {
+  if (!until) return 'бесплатно'
+  const left = until - Math.floor(Date.now() / 1000)
+  if (left <= 60) return 'бесплатно, меньше минуты'
+  return `бесплатно ещё ${Math.ceil(left / 60)} мин`
+}
+
 interface CatalogSku {
   id: Sku
   kind: 'scene' | 'deck'
@@ -129,7 +144,7 @@ export function mountShop(root: HTMLElement, adapter: PlatformAdapter, hooks: Sh
       card.className = 'shop-card'
 
       // Триал ≠ покупка. `usable` — можно применить прямо сейчас (куплено,
-      // бесплатно или открыто на первый день). `owns` — принадлежит навсегда.
+      // бесплатно или открыто приветственным часом). `owns` — навсегда.
       // Их нельзя смешивать: иначе триальный пак прикинулся бы купленным и
       // спрятал путь покупки ровно в тот день, когда игрок им любуется.
       const onTrial = trialSkus.has(sku.id)
@@ -194,11 +209,11 @@ export function mountShop(root: HTMLElement, adapter: PlatformAdapter, hooks: Sh
       }
       if (!owns && sku.price > 0) {
         // Не принадлежит навсегда — подпись прямо на картинке. На триале это
-        // не ценник, а «первый день бесплатно» без таймера: настоящую цену
-        // игрок увидит на кнопке «Оставить». Медальон в другом углу, не спорят.
+        // не ценник, а остаток приветственного часа: настоящую цену игрок
+        // увидит на кнопке «Оставить». Медальон в другом углу, не спорят.
         const tag = document.createElement('span')
         tag.className = onTrial ? 'shop-pricetag shop-price-trial' : 'shop-pricetag'
-        tag.textContent = onTrial ? 'первый день бесплатно' : price
+        tag.textContent = onTrial ? trialLeft(adapter.getTrial?.()?.until) : price
         thumb.appendChild(tag)
       }
       // Куплен, но не в игре — миниатюра чистая; ниже кнопка «Применить».
@@ -226,8 +241,9 @@ export function mountShop(root: HTMLElement, adapter: PlatformAdapter, hooks: Sh
       if (!owns && sku.price > 0) {
         // Не принадлежит навсегда — покупка. Обычно цена уже на картинке, и на
         // кнопке только действие. На триале это тихая вторичная «Оставить ·
-        // цена»: давить незачем, пак и так открыт сегодня, но путь оставить
-        // его себе обязан быть виден именно в этот день.
+        // цена»: давить незачем, пак и так открыт, но путь оставить его себе
+        // обязан быть виден именно сейчас — часа хватит ровно на то, чтобы
+        // понять, нравится ли.
         const action = document.createElement('button')
         if (onTrial) {
           action.className = 'shop-keep-btn'
