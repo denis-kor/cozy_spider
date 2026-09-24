@@ -1,0 +1,283 @@
+{
+  "id": "kamchatka",
+  "designSize": [
+    2560,
+    1600
+  ],
+  "overscan": 0.08,
+  "light": {
+    "pos": [
+      0.1445,
+      0.5931
+    ],
+    "color": [
+      1.0,
+      0.72,
+      0.38
+    ],
+    "intensity": 0.4
+  },
+  "defaultMood": "kamchatkaEvening",
+  "win": "eruption",
+  "layers": [
+    {
+      "id": "00-sky",
+      "src": "00-sky.webp",
+      "parallax": 0.0
+    },
+    {
+      "id": "01-volcano",
+      "src": "01-volcano.webp",
+      "parallax": 0.02
+    },
+    {
+      "id": "02-bay",
+      "src": "02-bay.webp",
+      "parallax": 0.03
+    },
+    {
+      "id": "03-forest",
+      "src": "03-forest.webp",
+      "parallax": 0.05,
+      "effects": [
+        "wind"
+      ],
+      "mask": "03-forest.wind.webp",
+      "intensity": 0.3
+    },
+    {
+      "id": "04-house",
+      "src": "04-house.webp",
+      "parallax": 0.06
+    },
+    {
+      "id": "05-bushes",
+      "src": "05-bushes.webp",
+      "parallax": 0.09,
+      "effects": [
+        "wind"
+      ],
+      "mask": "05-bushes.wind.webp",
+      "intensity": 0.55
+    },
+    {
+      "id": "06-sill",
+      "src": "06-sill.webp",
+      "parallax": 0.28
+    },
+    {
+      "id": "07-items",
+      "src": "07-items.webp",
+      "parallax": 0.3
+    },
+    {
+      "id": "08-frame-right",
+      "src": "08-frame-right.webp",
+      "parallax": 0.34,
+      "effects": [
+        "wind"
+      ],
+      "mask": "08-frame-right.wind.webp",
+      "intensity": 0.9
+    },
+    {
+      "id": "09-frame-left",
+      "src": "09-frame-left.webp",
+      "parallax": 0.34,
+      "effects": [
+        "wind"
+      ],
+      "mask": "09-frame-left.wind.webp",
+      "intensity": 1.1
+    },
+    {
+      "id": "10-lamp",
+      "src": "10-lamp.webp",
+      "parallax": 0.34
+    }
+  ],
+  "plannedLayers": [
+    {
+      "id": "00-sky",
+      "src": "00-sky.png",
+      "parallax": 0.0
+    },
+    {
+      "id": "01-volcano",
+      "src": "01-volcano.png",
+      "parallax": 0.02
+    },
+    {
+      "id": "02-bay",
+      "src": "02-bay.png",
+      "parallax": 0.03
+    },
+    {
+      "id": "03-forest",
+      "src": "03-forest.png",
+      "parallax": 0.05,
+      "effects": [
+        "wind"
+      ],
+      "mask": "03-forest.wind.png",
+      "intensity": 0.3
+    },
+    {
+      "id": "04-house",
+      "src": "04-house.png",
+      "parallax": 0.06
+    },
+    {
+      "id": "05-bushes",
+      "src": "05-bushes.png",
+      "parallax": 0.09,
+      "effects": [
+        "wind"
+      ],
+      "mask": "05-bushes.wind.png",
+      "intensity": 0.55
+    },
+    {
+      "id": "06-sill",
+      "src": "06-sill.png",
+      "parallax": 0.28
+    },
+    {
+      "id": "07-items",
+      "src": "07-items.png",
+      "parallax": 0.3
+    },
+    {
+      "id": "08-frame-right",
+      "src": "08-frame-right.png",
+      "parallax": 0.34,
+      "effects": [
+        "wind"
+      ],
+      "mask": "08-frame-right.wind.png",
+      "intensity": 0.9
+    },
+    {
+      "id": "09-frame-left",
+      "src": "09-frame-left.png",
+      "parallax": 0.34,
+      "effects": [
+        "wind"
+      ],
+      "mask": "09-frame-left.wind.png",
+      "intensity": 1.1
+    },
+    {
+      "id": "10-lamp",
+      "src": "10-lamp.png",
+      "parallax": 0.34
+    }
+  ],
+  "winVariant": {
+    "mood": "erupting",
+    "layers": [
+      {
+        "id": "00-sky",
+        "src": "00-sky.erupt.webp"
+      },
+      {
+        "id": "01-volcano",
+        "src": "01-volcano.erupt.webp"
+      }
+    ]
+  },
+  "actors": [
+    {
+      "id": "plume",
+      "type": "plume",
+      "src": "plume.webp",
+      "anchor": [
+        1676,
+        398
+      ],
+      "size": [
+        1000,
+        610
+      ],
+      "stem": 0.464,
+      "parallax": 0.02,
+      "after": "01-volcano"
+    },
+    {
+      "id": "cat",
+      "type": "cat",
+      "src": "cat/cat-open.webp",
+      "blinkSrc": "cat/cat-blink.webp",
+      "watchSrc": "cat/cat-watch.webp",
+      "leapSrc": "cat/cat-leap.webp",
+      "anchor": [
+        1990,
+        1292
+      ],
+      "size": [
+        700,
+        416
+      ],
+      "parallax": 0.28,
+      "resident": true,
+      "winRun": true,
+      "after": "06-sill",
+      "shadow": {
+        "w": 0.66,
+        "a": 0.8,
+        "y": 0.45
+      }
+    },
+    {
+      "id": "radio",
+      "type": "radio",
+      "src": "tape-deck.webp",
+      "anchor": [
+        1182,
+        1405
+      ],
+      "size": [
+        425,
+        180
+      ],
+      "parallax": 0.28,
+      "after": "06-sill",
+      "window": [
+        0.1035,
+        0.095,
+        0.5243,
+        0.335
+      ],
+      "keys": [
+        [
+          0.1151,
+          0.704,
+          0.1509,
+          0.136
+        ],
+        [
+          0.3847,
+          0.706,
+          0.1521,
+          0.136
+        ],
+        [
+          0.6612,
+          0.708,
+          0.1521,
+          0.134
+        ]
+      ],
+      "tint": 13487565,
+      "shadow": {
+        "w": 0.94,
+        "a": 0.62,
+        "y": 0.44
+      }
+    }
+  ],
+  "focus": [
+    0.5,
+    0.72
+  ]
+}

@@ -15,3 +15,8 @@ _to-gpu-pc-2/
 _to-gpu-pc-3/
 _to-gpu-tape2/
 *.zip
+scene/kamchatka/*.png
+scene/kamchatka/cat/
+scene/kamchatka/cut/
+scene/kamchatka/actors/
+scene/kamchatka/tools/

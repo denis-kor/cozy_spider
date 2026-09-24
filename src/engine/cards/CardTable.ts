@@ -172,6 +172,15 @@ export class CardTable {
   /** Дёргается один раз в момент победы — сцена запускает торжество. */
   onWon?: () => void
 
+  /**
+   * Свежая партия (новая игра или рестарт).
+   *
+   * Сцене это нужно, чтобы свернуть победное торжество: извержение на
+   * Камчатке меняет два слоя и муд, и без явного сигнала они остались бы
+   * гореть над новым раскладом.
+   */
+  onNewDeal?: () => void
+
   constructor(game: Game, options: TableOptions) {
     this.game = game
     this.renderer = options.renderer
@@ -845,6 +854,7 @@ export class CardTable {
     // работают как раньше.
     this.game = new Game(seed ?? pickEasySeed(suits), suits)
     this.selected = null
+    this.onNewDeal?.()
     this.rebuildViews()
     // Свежий расклад всегда въезжает раздачей из угла, а не появляется разом.
     this.dealOut()
@@ -981,6 +991,7 @@ export class CardTable {
   restart(): void {
     this.game.restart()
     this.selected = null
+    this.onNewDeal?.()
     this.rebuildViews()
     // Тот же расклад, но подаём его заново раздачей из угла — как «Новая
     // игра». Через sync(false) рестарт был не виден, если ходов ещё не

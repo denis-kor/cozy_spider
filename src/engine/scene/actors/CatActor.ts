@@ -48,12 +48,20 @@ export class CatActor {
   readonly root = new Container()
 
   private readonly sprite: Sprite
+  /** Контактная тень. Пустая, если в манифесте её не просили. */
+  private readonly contact = new Graphics()
   private readonly clip = new Graphics()
   /** Отражение и его собственная маска — оно живёт НИЖЕ ватерлинии. */
   private readonly mirror: Sprite
   private readonly mirrorClip = new Graphics()
   private readonly open: Texture
   private readonly blink: Texture
+  /** Позы победного финала. Нет в манифесте — финал деградирует в обычный. */
+  private readonly watch?: Texture
+  private readonly leap?: Texture
+
+  /** 1 — как нарисован, -1 — зеркально. Прыжок нарисован влево, уходит вправо. */
+  private facing = 1
 
   private phase: Phase = 'hidden'
   private phaseTime = 0
@@ -78,14 +86,23 @@ export class CatActor {
   private celebDone?: () => void
   private celebStartY = 0
 
+  // Победный побег (Камчатка): встал, развернулся к сопке, посмотрел на
+  // извержение и ускакал прыжком за правый косяк.
+  private running = false
+  private runTime = 0
+  private runDone?: () => void
+
   constructor(
     readonly spec: ActorSpec,
     open: Texture,
     blink: Texture,
     private readonly random: () => number = Math.random,
+    poses?: { watch?: Texture; leap?: Texture },
   ) {
     this.open = open
     this.blink = blink
+    this.watch = poses?.watch
+    this.leap = poses?.leap
 
     this.sprite = new Sprite(open)
     this.sprite.anchor.set(0.5, 0.5)
@@ -101,11 +118,26 @@ export class CatActor {
     this.mirror.scale.y = -1
     this.mirror.alpha = 0.24
 
-    this.root.addChild(this.mirrorClip, this.mirror, this.clip, this.sprite)
-    this.mirror.mask = this.mirrorClip
-    this.sprite.mask = this.clip
+    this.root.addChild(this.contact, this.mirrorClip, this.mirror, this.clip, this.sprite)
 
-    this.phaseLength = this.pick(HIDDEN_RANGE)
+    // Обрез по воде нужен только там, где под котиком вода или кромка.
+    // Нет ватерлинии — нет и маски: иначе её волнистый край ползёт вбок
+    // по неподвижному котику и читается швом.
+    if (spec.waterline !== undefined) {
+      this.mirror.mask = this.mirrorClip
+      this.sprite.mask = this.clip
+    } else {
+      this.mirror.visible = false
+      this.mirrorClip.visible = false
+      this.clip.visible = false
+    }
+
+    // Резидент начинает жизнь наверху: ему неоткуда всплывать.
+    if (spec.resident) {
+      this.phase = 'surfaced'
+      this.rise = 1
+    }
+    this.phaseLength = spec.resident ? Number.POSITIVE_INFINITY : this.pick(HIDDEN_RANGE)
     this.blinkIn = this.pick([2, 7])
   }
 
@@ -129,6 +161,14 @@ export class CatActor {
 
     this.sprite.width = this.baseW
     this.sprite.height = this.baseH
+
+    this.drawContact()
+
+    // Без ватерлинии масок нет — строить полигоны не из чего и незачем.
+    if (this.spec.waterline === undefined) {
+      this.localWater = this.baseH
+      return
+    }
 
     this.mirror.width = this.baseW
     this.mirror.height = this.baseH * 0.55
@@ -178,7 +218,31 @@ export class CatActor {
 
   private localWater = 0
 
+  /**
+   * Контактная тень: три вложенных эллипса вместо размытия.
+   *
+   * Блюр потребовал бы отдельного прохода фильтра каждый кадр ради пятна,
+   * на которое никто не смотрит прямо, — а замечают его только когда его
+   * нет. Тень неподвижна: она принадлежит доске, а не котику, и не обязана
+   * повторять его качку.
+   */
+  private drawContact(): void {
+    const s = this.spec.shadow
+    this.contact.clear()
+    if (!s) return
+    const cy = this.baseH * (s.y ?? 0.44)
+    for (const [k, mul] of [[1.0, 0.3], [0.72, 0.34], [0.44, 0.36]] as const) {
+      this.contact
+        .ellipse(0, cy, this.baseW * s.w * 0.5 * k, this.baseH * s.w * 0.16 * k)
+        .fill({ color: 0x130a05, alpha: s.a * mul })
+    }
+  }
+
   update(dt: number): void {
+    if (this.running) {
+      this.updateRun(dt)
+      return
+    }
     if (this.celebrating) {
       this.updateCelebration(dt)
       return
@@ -216,7 +280,10 @@ export class CatActor {
       : 1
     const overshoot = this.phase === 'rising' ? Math.sin(this.rise * Math.PI) * 0.08 : 0
 
-    const bob = Math.sin(this.time * 1.1) * this.baseH * 0.012 * this.rise
+    // Резидент лежит на доске: качка ему нужна только чтобы не быть
+    // наклейкой, и она втрое тише, чем у плывущего.
+    const amp = this.spec.resident ? 0.004 : 0.012
+    const bob = Math.sin(this.time * 1.1) * this.baseH * amp * this.rise
     this.sprite.y = (1 - eased - overshoot) * this.diveScreen + bob
 
     // Отражение зеркалит спрайт относительно ватерлинии и дышит своей
@@ -228,9 +295,13 @@ export class CatActor {
 
     // Волна ползёт вбок — маска шире кадра, поэтому сдвиг не открывает
     // краёв. Обе маски идут вместе, иначе кромка и отражение разъедутся.
-    const drift = Math.sin(this.time * 0.23) * this.baseW * 0.5
-    this.clip.x = drift
-    this.mirrorClip.x = drift
+    if (this.spec.waterline !== undefined) {
+      const drift = Math.sin(this.time * 0.23) * this.baseW * 0.5
+      this.clip.x = drift
+      this.mirrorClip.x = drift
+    }
+
+    this.sprite.scale.x = Math.abs(this.sprite.scale.x) * this.facing
 
     // Моргать имеет смысл только когда глаза видно.
     if (this.rise > 0.8) {
@@ -261,6 +332,11 @@ export class CatActor {
   /** Умеет ли эта сцена победный прыжок (флаг в данных сцены). */
   get canCelebrate(): boolean {
     return this.spec.winJump === true
+  }
+
+  /** Умеет ли котик победный побег: встал, посмотрел, ускакал. */
+  get canRun(): boolean {
+    return this.spec.winRun === true && !!this.watch && !!this.leap
   }
 
   /**
@@ -331,6 +407,104 @@ export class CatActor {
     const done = this.celebDone
     this.celebDone = undefined
     done?.()
+  }
+
+  /**
+   * Финал победы на Камчатке: встал, посмотрел на извержение, ускакал.
+   *
+   * `onDone` — когда скрылся за косяком. Прыжок нарисован влево, поэтому
+   * спрайт зеркалится: уходит он вправо, туда, где стоит косяк окна.
+   * Маска для ухода не нужна — косяк это слой ПОВЕРХ котика, он закроет
+   * его сам.
+   */
+  runAway(onDone?: () => void): void {
+    if (this.running || !this.canRun) return
+    this.running = true
+    this.runTime = 0
+    this.runDone = onDone
+    this.celebrating = false
+  }
+
+  private updateRun(dt: number): void {
+    this.runTime += dt
+    this.time += dt
+    const t = this.runTime
+
+    const STARTLE = 0.45 // вскинулся и развернулся
+    const WATCH = 3.6    // стоит и смотрит
+    const CROUCH = 3.85  // присел перед прыжком
+    const LEAP = 4.9     // ушёл за косяк
+
+    let x = 0
+    let y = 0
+
+    if (t < WATCH) {
+      this.sprite.texture = this.watch!
+      this.facing = 1
+      // Подскок в момент, когда заметил: короткий, затухающий.
+      const s = Math.max(0, 1 - t / STARTLE)
+      y = -this.baseH * 0.05 * Math.sin(Math.min(1, t / STARTLE) * Math.PI) - s * 0
+      // Дыхание, пока смотрит: иначе поза читается как наклейка.
+      y += Math.sin(this.time * 1.4) * this.baseH * 0.006
+    } else if (t < CROUCH) {
+      this.sprite.texture = this.watch!
+      this.facing = 1
+      y = this.baseH * 0.035 * ((t - WATCH) / (CROUCH - WATCH))
+    } else if (t < LEAP) {
+      this.sprite.texture = this.leap!
+      this.facing = -1
+      const k = (t - CROUCH) / (LEAP - CROUCH)
+      // Разгон: прыжок не равномерный, он выстреливает.
+      const e = k * k * (3 - 2 * k)
+      x = this.baseW * 1.25 * e
+      // Дуга: вверх и вниз за один пролёт.
+      y = -this.baseH * 0.3 * Math.sin(k * Math.PI)
+    } else {
+      this.endRun()
+      return
+    }
+
+    this.sprite.x = x
+    this.sprite.y = y
+    this.sprite.scale.x = Math.abs(this.sprite.scale.x) * this.facing
+    this.mirror.alpha = 0
+    // Тень уезжает вместе с котиком: он в прыжке, под ним уже не доска.
+    this.contact.x = x
+    this.contact.alpha = Math.max(0, 1 - Math.abs(x) / (this.baseW * 0.7))
+  }
+
+  private endRun(): void {
+    this.running = false
+    this.contact.x = 0
+    this.contact.alpha = 1
+    // Котик ушёл. Пока сцена не перезагружена, он не возвращается:
+    // «убежал и через секунду снова лежит» рушит всю сцену финала.
+    this.sprite.visible = false
+    const done = this.runDone
+    this.runDone = undefined
+    done?.()
+  }
+
+  /** Новая партия: вернуть на место и в обычный вид. */
+  resetPose(): void {
+    this.running = false
+    this.contact.x = 0
+    this.contact.alpha = 1
+    this.celebrating = false
+    this.facing = 1
+    this.sprite.visible = true
+    this.sprite.texture = this.open
+    this.sprite.x = 0
+    this.sprite.y = 0
+    if (this.spec.resident) {
+      this.phase = 'surfaced'
+      this.rise = 1
+      this.phaseTime = 0
+      this.phaseLength = Number.POSITIVE_INFINITY
+    } else {
+      this.enter('hidden', this.pick(HIDDEN_RANGE))
+      this.rise = 0
+    }
   }
 
   get state(): { phase: Phase; rise: number } {

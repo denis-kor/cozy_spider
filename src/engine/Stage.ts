@@ -7,7 +7,7 @@ import { CardTable } from './cards/CardTable'
 import { loadDeckArt } from './cards/deckArt'
 import { AtmosphereFilter } from './filters/AtmosphereFilter'
 import type { LoadProgress } from './loading'
-import { Celebration } from './scene/Celebration'
+import { Celebration, type WinEffect } from './scene/Celebration'
 import { Ambience } from './scene/Ambience'
 import { LayerScene } from './scene/LayerScene'
 import type { RadioActor } from './scene/actors/RadioActor'
@@ -149,6 +149,7 @@ export class Stage {
     this.app.stage.addChild(this.world)
 
     this.table.onWon = () => this.celebrate()
+    this.table.onNewDeal = () => this.resetCelebration()
 
     this.cardOcclusion = RenderTexture.create({
       width: this.app.screen.width,
@@ -217,7 +218,7 @@ export class Stage {
    * и есть «поздравление» от сцены.
    */
   /** Дёргается при старте торжества — приложение навешивает свою подачу. */
-  onCelebrate?: (effect: 'fireworks' | 'starfall') => void
+  onCelebrate?: (effect: WinEffect) => void
 
   /**
    * Дёргается при потере WebGL-контекста (на телефоне — обычно нехватка
@@ -235,8 +236,21 @@ export class Stage {
     if (this.celebration.active) return
     const effect = this.scene.sceneSpec.win ?? 'fireworks'
     const cat = this.scene.actor('cat')?.cat
+
+    // Извержение начинается сразу, а не в разгаре: столб обязан успеть
+    // подняться, пока котик ещё лежит. Иначе он вскидывается на пустое
+    // небо, и вся причинность финала читается задом наперёд.
+    if (effect === 'eruption') {
+      void this.scene.erupt()
+      const mood = this.scene.winMood
+      if (mood) this.ambience.setMood(mood)
+    }
+
     this.celebration.start(effect, () => {
-      if (cat?.canCelebrate) {
+      if (cat?.canRun) {
+        // Камчатка: встал, посмотрел на сопку и ускакал за косяк.
+        cat.runAway(() => this.onFinale?.())
+      } else if (cat?.canCelebrate) {
         // Пруд: котик высовывается из воды выше обычного, подмигивает и ныряет;
         // плашку показываем, когда он нырнул обратно.
         cat.celebrate(() => this.onFinale?.())
@@ -247,6 +261,12 @@ export class Stage {
       }
     })
     this.onCelebrate?.(effect)
+  }
+
+  /** Новая партия: свернуть торжество и вернуть сцене обычный вид. */
+  resetCelebration(): void {
+    this.scene.resetWin()
+    this.ambience.setMood(this.scene.sceneSpec.defaultMood)
   }
 
   private frame(deltaMs: number): void {
@@ -264,6 +284,11 @@ export class Stage {
     this.scene.update(dt, this.ambience)
     this.table.update(dt)
     this.celebration.resize(this.app.screen.width, this.app.screen.height)
+    // Жерло знает сцена: его экранная точка зависит от параллакса, фокуса
+    // и вьюпорта. Без этого угли задаются долей кадра и на другом экране
+    // сыплются со склона.
+    const plume = this.scene.actor('plume')?.plume
+    if (plume) this.celebration.setOrigin(plume.ventX, plume.ventY)
     this.celebration.update(dt)
 
     const a = this.ambience

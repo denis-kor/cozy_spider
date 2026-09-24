@@ -21,10 +21,19 @@ import { Container, Sprite, Texture } from 'pixi.js'
  * салюта — вызывающий решает, что случится).
  */
 
-export type WinEffect = 'fireworks' | 'starfall'
+export type WinEffect = 'fireworks' | 'starfall' | 'eruption'
 
-/** Сколько секунд идёт подсыпка нового; хвост дотлевает сам. */
-const SPAWN_FOR = 5.2
+/**
+ * Сколько секунд идёт подсыпка нового; хвост дотлевает сам.
+ *
+ * У извержения дольше: финал сцены длиннее салюта — котик успевает встать,
+ * посмотреть на сопку и ускакать, и всё это время пепел обязан идти.
+ */
+const SPAWN_FOR: Record<WinEffect, number> = {
+  fireworks: 5.2,
+  starfall: 5.2,
+  eruption: 8.0,
+}
 const PEAK_AT = 1.5
 
 const FIREWORK_PALETTES: number[][] = [
@@ -34,6 +43,21 @@ const FIREWORK_PALETTES: number[][] = [
   [0xf3ecdb, 0xd8c9a0, 0xffffff], // бумага и луна
 ]
 const GOLD = [0xffd27f, 0xf3ecdb, 0xe3b34f]
+
+/** Извержение: угли у кратера и пепел, который потом сыплется на город. */
+const EMBERS = [0xffb45e, 0xff8a4c, 0xffd8a0]
+// Пепел тёмный намеренно: светлые хлопья поверх закатного неба читаются
+// не грязью в воздухе, а боке — белыми кружками не пойми откуда.
+const ASH = [0x5f5768, 0x4a4356, 0x746a7a]
+
+/**
+ * Где на экране кратер, в долях кадра.
+ *
+ * Сцена кладётся по `cover` с запасом под параллакс, поэтому точных
+ * экранных координат у кратера нет — и не нужно: угли летят вверх и
+ * рассыпаются, промах в пару процентов кадра неразличим.
+ */
+const CRATER: [number, number] = [0.655, 0.235]
 
 // ---------------------------------------------------------------------------
 //  Текстуры частиц: рисуются один раз Canvas2D — Pixi Graphics не умеет
@@ -129,6 +153,9 @@ export class Celebration {
   private onPeak?: () => void
   private w = 1
   private h = 1
+  /** Где на экране жерло. Не задано — берётся доля кадра из CRATER. */
+  private originX?: number
+  private originY?: number
 
   constructor() {
     this.root.eventMode = 'none'
@@ -137,6 +164,12 @@ export class Celebration {
   resize(w: number, h: number): void {
     this.w = w
     this.h = h
+  }
+
+  /** Точка выброса в экранных координатах; её считает сцена. */
+  setOrigin(x: number, y: number): void {
+    this.originX = x
+    this.originY = y
   }
 
   get active(): boolean {
@@ -164,7 +197,7 @@ export class Celebration {
         this.onPeak?.()
       }
 
-      if (this.t <= SPAWN_FOR) this.spawn(dt)
+      if (this.t <= SPAWN_FOR[this.effect]) this.spawn(dt)
       else this.t = -1 // подсыпка кончилась, дальше только дотлевание
     }
 
@@ -239,6 +272,15 @@ export class Celebration {
   // ------------------------------------------------------------------ спавн
 
   private spawn(dt: number): void {
+    if (this.effect === 'eruption') {
+      // Угли из кратера — плотно в первые секунды, дальше реже: взрыв
+      // случается один раз, а пепел идёт долго.
+      const heat = Math.max(0.22, 1 - this.t / 4)
+      this.rate(15 * heat, dt, () => this.ember())
+      this.rate(14, dt, () => this.ashFlake())
+      return
+    }
+
     if (this.effect === 'fireworks') {
       this.nextRocket -= dt
       if (this.nextRocket <= 0) {
@@ -255,15 +297,20 @@ export class Celebration {
       this.comet()
     }
 
-    const rate = 14
-    let n = Math.floor(rate * dt) + (Math.random() < ((rate * dt) % 1) ? 1 : 0)
-    while (n-- > 0) this.fallingStar()
+    this.rate(14, dt, () => this.fallingStar())
 
     this.nextGlint -= dt
     if (this.nextGlint <= 0) {
       this.nextGlint = 0.25 + Math.random() * 0.35
       this.glint()
     }
+  }
+
+  /** Спавн с дробной частотой: n штук в секунду, без округления в ноль. */
+  private rate(perSecond: number, dt: number, make: () => void): void {
+    const exact = perSecond * dt
+    let n = Math.floor(exact) + (Math.random() < (exact % 1) ? 1 : 0)
+    while (n-- > 0) make()
   }
 
   /**
@@ -426,6 +473,67 @@ export class Celebration {
     trailEvery: 0,
       trailIn: 0,
     }, this.w * Math.random(), -size)
+  }
+
+  /**
+   * Уголь из кратера: летит вверх, теряет скорость и гаснет на подъёме.
+   *
+   * Аддитив — это свет, и он честно работает только в тёмной части кадра.
+   * Кратер как раз там: небо над сопкой темнее карт, которых к этому
+   * моменту на столе уже нет.
+   */
+  private ember(): void {
+    const size = Math.max(2, this.h * (0.0022 + Math.random() * 0.0035))
+    const spread = this.w * 0.018
+    this.push({
+      kind: 'spark',
+      s: this.sprite(glow(), EMBERS[(Math.random() * EMBERS.length) | 0], size),
+      vx: this.w * (Math.random() * 0.06 - 0.03),
+      vy: -this.h * (0.22 + Math.random() * 0.3),
+      age: 0,
+      ttl: 1.6 + Math.random() * 1.8,
+      // Тяга вверх, а не гравитация вниз: горячий воздух несёт уголь,
+      // пока тот не остынет. Падающие обратно угли читались бы искрами
+      // костра, а не выбросом.
+      gravity: -this.h * 0.04,
+      drag: 0.9,
+      size,
+      stretch: 4,
+      twinkle: Math.random() * Math.PI * 2,
+      twinkleSpeed: 7 + Math.random() * 6,
+      spin: 0,
+      trailEvery: 0,
+      trailIn: 0,
+    }, (this.originX ?? this.w * CRATER[0]) + (Math.random() - 0.5) * spread,
+       (this.originY ?? this.h * CRATER[1]) + (Math.random() - 0.5) * spread * 0.4)
+  }
+
+  /**
+   * Хлопья пепла: медленно сносит через весь кадр.
+   *
+   * Обычное смешивание, а не аддитив: пепел — это грязь в воздухе, он
+   * темнит то, через что летит. Аддитивный пепел светился бы.
+   */
+  private ashFlake(): void {
+    const size = this.h * (0.006 + Math.random() * 0.01)
+    const fall = this.h * (0.05 + Math.random() * 0.09)
+    this.push({
+      kind: 'spark',
+      s: this.sprite(glow(), ASH[(Math.random() * ASH.length) | 0], size, 'normal'),
+      vx: -this.w * (0.02 + Math.random() * 0.05),
+      vy: fall,
+      age: 0,
+      ttl: (this.h * (0.6 + Math.random() * 0.5)) / fall,
+      gravity: 0,
+      drag: 0,
+      size,
+      stretch: 0,
+      twinkle: Math.random() * Math.PI * 2,
+      twinkleSpeed: 1.6 + Math.random() * 2,
+      spin: (Math.random() - 0.5) * 1.2,
+      trailEvery: 0,
+      trailIn: 0,
+    }, this.w * (0.15 + Math.random() * 1.0), -size)
   }
 
   /** Блик: звезда вспыхивает на месте и тает — пыльца волшебства. */

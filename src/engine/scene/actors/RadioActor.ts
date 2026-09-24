@@ -186,12 +186,18 @@ export class RadioActor {
     // Тень: три вложенных эллипса вместо блюра. Размытие потребовало бы
     // отдельного прохода фильтра на каждый кадр ради пятна, которое и так
     // никто не разглядывает.
+    // Сила и место берутся из манифеста, если художник их задал: у пруда
+    // кассетник стоит на мокрой доске в полумраке, на Камчатке — под
+    // лампой на светлом дереве, и одно пятно на обе сцены не годится.
+    const sh = this.spec.shadow
     this.contact.clear()
-    const cy = h * 0.44
-    for (const [k, alpha] of [[1.0, 0.10], [0.78, 0.13], [0.55, 0.16]] as const) {
+    const cy = h * (sh?.y ?? 0.44)
+    const rx = w * (sh ? sh.w * 0.5 : 0.42)
+    const base = sh?.a ?? 0.39
+    for (const [k, mul] of [[1.0, 0.26], [0.78, 0.33], [0.55, 0.41]] as const) {
       this.contact
-        .ellipse(0, cy, w * 0.42 * k, h * 0.07 * k)
-        .fill({ color: 0x0a1210, alpha })
+        .ellipse(0, cy, rx * k, h * 0.17 * (sh ? sh.w : 0.41) * k)
+        .fill({ color: 0x0a1210, alpha: base * mul })
     }
 
     const win = this.rect(this.layout.window)

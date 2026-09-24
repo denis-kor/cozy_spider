@@ -45,6 +45,32 @@ export const MOODS: Record<string, Mood> = {
     exposure: 0.94,
     vignette: 0.30,
   },
+  /** Камчатка: ясный вечер, тёплая лампа внутри, ветер с сопки снаружи. */
+  kamchatkaEvening: {
+    id: 'kamchatkaEvening',
+    lightColor: [1.0, 0.72, 0.38],
+    lightIntensity: 0.4,
+    rain: 0.0,
+    dust: 0.22,
+    wind: 0.45,
+    exposure: 1.02,
+    vignette: 0.2,
+  },
+  /**
+   * Камчатка на время извержения. Второй источник света на сцене —
+   * исключение, и оно проведено через муд намеренно: пусть кадр краснеет
+   * одним значением на всех, а не отдельным таймером у каждого эффекта.
+   */
+  erupting: {
+    id: 'erupting',
+    lightColor: [1.0, 0.5, 0.26],
+    lightIntensity: 0.62,
+    rain: 0.0,
+    dust: 0.6,
+    wind: 0.8,
+    exposure: 1.12,
+    vignette: 0.26,
+  },
   winterMorning: {
     id: 'winterMorning',
     lightColor: [0.78, 0.88, 1.0],
