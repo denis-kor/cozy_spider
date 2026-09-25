@@ -723,7 +723,7 @@
         left: 50%;
         bottom: calc(22px + env(safe-area-inset-bottom, 0px));
         transform: translate(-50%, 10px);
-        z-index: 60;
+        z-index: 100;
         display: flex;
         align-items: center;
         gap: 10px;
@@ -751,8 +751,10 @@
         stroke-width: 3;
         stroke-linecap: round;
         stroke-linejoin: round;
-        /* Мигание — секунда на цикл: за пять секунд жизни плашки ровно
-           пять подмигиваний, как и просили. */
+      }
+      /* Мигание — секунда на цикл: пять подмигиваний за первые пять секунд.
+         Дальше класс снимается, и плашка просто висит, пока не повернут. */
+      .rotate-hint.blink .rotate-hint-icon {
         animation: rh-blink 1s ease-in-out infinite;
       }
       /* Телефон встаёт на бок и возвращается — показываем сам жест. */
@@ -774,7 +776,7 @@
       }
       /* Уважаем системную просьбу не анимировать: значок просто стоит. */
       @media (prefers-reduced-motion: reduce) {
-        .rotate-hint-icon,
+        .rotate-hint.blink .rotate-hint-icon,
         .rotate-hint-icon .rh-phone { animation: none; }
       }
 

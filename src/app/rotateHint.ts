@@ -2,17 +2,24 @@
  * Подсказка «поверните телефон» — только для сенсорных устройств в портрете.
  *
  * Игра рисуется на весь вьюпорт и в вертикальном положении играется, но стол
- * сжимается до полоски: восемь колонок на ширину ладони. Поэтому в первые
- * секунды показываем тихую плашку с мигающим значком поворота.
+ * сжимается до полоски: восемь колонок на ширину ладони.
  *
- * Плашка намеренно НЕ блокирует игру: это подсказка, а не стена. Она
- * пропадает сама через пять секунд, мгновенно — при повороте в горизонт, и
- * по тапу, если игрок решил остаться в портрете. Второй раз за сессию не
- * приходит: напоминать взрослому человеку дважды — уже не уют.
+ * Два решения, купленные опытом первой версии:
+ *
+ * 1. Плашка поднимается СРАЗУ, ещё на заставке (поэтому z-index выше #boot).
+ *    Пока едут слои сцены, проходит несколько секунд, и подсказка, заведённая
+ *    после загрузки, успевала прожить свой срок незамеченной.
+ *
+ * 2. Плашка висит, ПОКА телефон в портрете, а не отмеренные пять секунд.
+ *    Мигает значок — первые пять секунд, дальше стоит спокойно, чтобы не
+ *    дёргать глаз всю партию. Уходит от поворота в горизонт или от тапа;
+ *    тап — это «я в курсе, играю стоя», и больше она не возвращается.
+ *
+ * Плашка намеренно НЕ блокирует игру: это подсказка, а не стена.
  */
 
-/** Сколько плашка висит, если её не поворачивают и не трогают. */
-const HINT_MS = 5000
+/** Сколько значок подмигивает, прежде чем успокоиться. */
+const BLINK_MS = 5000
 
 /** Уход плашки должен совпасть с длительностью transition в стилях. */
 const FADE_MS = 400
@@ -20,7 +27,6 @@ const FADE_MS = 400
 export function mountRotateHint(): void {
   // Десктоп мимо: окно там портретным почти не бывает, а поворачивать нечего.
   if (!window.matchMedia('(pointer: coarse)').matches) return
-  if (!isPortrait()) return
 
   const el = document.createElement('div')
   el.className = 'rotate-hint'
@@ -34,35 +40,50 @@ export function mountRotateHint(): void {
       </g>
     </svg>
     <span>Поверните телефон</span>`
-  document.body.appendChild(el)
-  requestAnimationFrame(() => el.classList.add('show'))
 
-  let gone = false
+  let shown = false
+  let dismissed = false
+  let blinkTimer = 0
+  let removeTimer = 0
+
+  const show = (): void => {
+    if (shown || dismissed) return
+    shown = true
+    clearTimeout(removeTimer)
+    document.body.appendChild(el)
+    requestAnimationFrame(() => el.classList.add('show', 'blink'))
+    blinkTimer = window.setTimeout(() => el.classList.remove('blink'), BLINK_MS)
+  }
+
   const hide = (): void => {
-    if (gone) return
-    gone = true
-    clearTimeout(timer)
-    portrait.removeEventListener?.('change', onOrientation)
-    window.removeEventListener('orientationchange', onOrientation)
-    window.removeEventListener('resize', onOrientation)
-    el.classList.remove('show')
-    setTimeout(() => el.remove(), FADE_MS)
+    if (!shown) return
+    shown = false
+    clearTimeout(blinkTimer)
+    el.classList.remove('show', 'blink')
+    removeTimer = window.setTimeout(() => el.remove(), FADE_MS)
   }
 
-  // Повернули — плашке больше нечего сказать, уходит сразу.
-  const onOrientation = (): void => {
-    if (!isPortrait()) hide()
+  const sync = (): void => {
+    if (isPortrait()) show()
+    else hide()
   }
 
-  const portrait = window.matchMedia('(orientation: portrait)')
-  portrait.addEventListener?.('change', onOrientation)
+  // Тап — «понял, играю стоя»: убрать и больше не возвращаться.
+  el.addEventListener('pointerdown', () => {
+    dismissed = true
+    hide()
+  })
+
   // iOS отдаёт старые размеры сразу после поворота (см. viewport.ts),
-  // поэтому слушаем и событие поворота, и ресайз — сработает то, что придёт.
-  window.addEventListener('orientationchange', onOrientation)
-  window.addEventListener('resize', onOrientation)
-  el.addEventListener('pointerdown', hide)
+  // поэтому слушаем всё, что может прийти: сработает то, что успеет.
+  window.matchMedia('(orientation: portrait)').addEventListener?.('change', sync)
+  window.addEventListener('orientationchange', () => {
+    sync()
+    setTimeout(sync, 350)
+  })
+  window.addEventListener('resize', sync)
 
-  const timer = setTimeout(hide, HINT_MS)
+  sync()
 }
 
 /**
