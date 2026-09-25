@@ -811,10 +811,24 @@
 
       @media (max-width: 720px) {
         .hud-title { display: none; }
-        .hud-group { justify-content: flex-end; row-gap: 5px; }
         .hud-bar { padding: 6px 8px; gap: 6px; }
-        .hud-group { padding: 4px 8px; border-radius: 10px; }
+        .hud-group { padding: 5px 7px; border-radius: 10px; }
         button { padding: 5px 8px; font-size: 13px; }
+
+        /* На телефоне обе панели во всю ширину: две плашки разной длины,
+           да ещё со второй строкой, прижатой вправо, читаются как сбой
+           вёрстки, а не как панель. */
+        .hud-group { width: 100%; box-sizing: border-box; justify-content: center; }
+        /* Кнопки действий — ровная сетка в три колонки. Flex-перенос давал
+           рваный хвост: четыре кнопки сверху, две в углу. Сетка держит
+           одинаковую ширину независимо от длины подписи и от того, сколько
+           кнопок собралось (лавка и меню зависят от хуков). */
+        .hud-group-actions {
+          display: grid;
+          grid-template-columns: repeat(3, 1fr);
+          gap: 6px;
+        }
+        .hud-group-actions button { width: 100%; }
       }
     </style>
   </head>

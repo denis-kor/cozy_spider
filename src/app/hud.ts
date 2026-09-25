@@ -27,7 +27,7 @@ export function mountHud(stage: Stage, root: HTMLElement, hooks: HudHooks = {}):
 
   root.innerHTML = `
     <div class="hud-bar hud-top">
-      <div class="hud-group">
+      <div class="hud-group hud-group-suits">
         <span class="hud-title">Паук</span>
         <span class="hud-suits">
           мастей
@@ -38,7 +38,7 @@ export function mountHud(stage: Stage, root: HTMLElement, hooks: HudHooks = {}):
           </span>
         </span>
       </div>
-      <div class="hud-group">
+      <div class="hud-group hud-group-actions">
         <button data-new>Новая игра</button>
         <button data-restart>Заново</button>
         <button data-undo>Отменить</button>
