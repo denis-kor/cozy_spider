@@ -39,7 +39,8 @@ export function mountRotateHint(): void {
         <line x1="29" y1="55.5" x2="35" y2="55.5" />
       </g>
     </svg>
-    <span>Поверните телефон</span>`
+    <span>Поверните телефон</span>
+    <small>нажмите, чтобы скрыть</small>`
 
   let shown = false
   let dismissed = false
