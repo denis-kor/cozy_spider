@@ -104,6 +104,12 @@
       .hud-group {
         display: flex;
         align-items: center;
+        /* Перенос обязателен: на телефоне в портрете шесть кнопок в одну
+           строку не влезают, и «Меню» уезжало за правый край экрана —
+           титульник, профиль и вход становились недоступны. min-width:0
+           разрешает группе сжаться уже вьюпорта, иначе перенос не начнётся. */
+        flex-wrap: wrap;
+        min-width: 0;
         gap: 8px;
         pointer-events: auto;
         background: var(--panel);
@@ -793,6 +799,7 @@
 
       @media (max-width: 720px) {
         .hud-title { display: none; }
+        .hud-group { justify-content: flex-end; row-gap: 5px; }
         .hud-bar { padding: 6px 8px; gap: 6px; }
         .hud-group { padding: 4px 8px; border-radius: 10px; }
         button { padding: 5px 8px; font-size: 13px; }
