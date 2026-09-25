@@ -723,34 +723,46 @@
       #debug.show { display: block; }
 
       /* Подсказка «поверните телефон». Плашка, а не стена: игру не
-         перекрывает, живёт пять секунд и уходит от поворота или тапа. */
-      .rotate-hint {
+         перекрывает и уходит от поворота или тапа.
+
+         Центрирует ОБЁРТКА во весь экран, а не transform самой панели, и
+         backdrop-filter здесь нет намеренно: связка fixed + translate(-50%)
+         + backdrop-filter на Safari умеет рисовать пустоту вместо панели.
+         Обёртка не ловит нажатия — «Играть» под плашкой остаётся живой. */
+      .rotate-hint-wrap {
         position: fixed;
-        left: 50%;
-        top: 50%;
-        /* Своё смещение по X и Y — строго по центру экрана; въезд снизу
-           складывается с ним, поэтому -50% написан руками, а не translate(-50%,-50%). */
-        transform: translate(-50%, calc(-50% + 14px));
+        inset: 0;
         z-index: 100;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.4s ease;
+      }
+      .rotate-hint-wrap.show { opacity: 1; }
+
+      .rotate-hint {
         display: flex;
         flex-direction: column;
         align-items: center;
         gap: 14px;
         padding: 26px 34px 24px;
         border-radius: 20px;
-        background: rgba(12, 24, 20, 0.78);
+        background: rgba(12, 24, 20, 0.88);
         border: 1px solid var(--edge-strong);
-        backdrop-filter: blur(10px);
-        box-shadow: 0 18px 44px rgba(0, 0, 0, 0.45);
+        box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
         font-size: 21px;
         letter-spacing: 0.04em;
         white-space: nowrap;
-        opacity: 0;
-        transition: opacity 0.4s ease, transform 0.4s ease;
+        text-align: center;
         pointer-events: auto;
         cursor: pointer;
+        transform: translateY(12px);
+        transition: transform 0.4s ease;
       }
-      .rotate-hint.show { opacity: 1; transform: translate(-50%, -50%); }
+      .rotate-hint-wrap.show .rotate-hint { transform: none; }
+
       /* Плашка по центру накрывает «Играть» — подпись объясняет, как убрать. */
       .rotate-hint small {
         font-size: 12px;
@@ -771,7 +783,7 @@
       }
       /* Мигание — секунда на цикл: пять подмигиваний за первые пять секунд.
          Дальше класс снимается, и плашка просто висит, пока не повернут. */
-      .rotate-hint.blink .rotate-hint-icon {
+      .rotate-hint-wrap.blink .rotate-hint-icon {
         animation: rh-blink 1s ease-in-out infinite;
       }
       /* Телефон встаёт на бок и возвращается — показываем сам жест. */
@@ -793,7 +805,7 @@
       }
       /* Уважаем системную просьбу не анимировать: значок просто стоит. */
       @media (prefers-reduced-motion: reduce) {
-        .rotate-hint.blink .rotate-hint-icon,
+        .rotate-hint-wrap.blink .rotate-hint-icon,
         .rotate-hint-icon .rh-phone { animation: none; }
       }
 

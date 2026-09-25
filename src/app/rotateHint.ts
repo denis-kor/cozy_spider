@@ -4,7 +4,7 @@
  * Игра рисуется на весь вьюпорт и в вертикальном положении играется, но стол
  * сжимается до полоски: восемь колонок на ширину ладони.
  *
- * Два решения, купленные опытом первой версии:
+ * Три решения, купленные опытом:
  *
  * 1. Плашка поднимается СРАЗУ, ещё на заставке (поэтому z-index выше #boot).
  *    Пока едут слои сцены, проходит несколько секунд, и подсказка, заведённая
@@ -12,10 +12,17 @@
  *
  * 2. Плашка висит, ПОКА телефон в портрете, а не отмеренные пять секунд.
  *    Мигает значок — первые пять секунд, дальше стоит спокойно, чтобы не
- *    дёргать глаз всю партию. Уходит от поворота в горизонт или от тапа;
- *    тап — это «я в курсе, играю стоя», и больше она не возвращается.
+ *    дёргать глаз всю партию. Уходит от поворота в горизонт или от тапа.
  *
- * Плашка намеренно НЕ блокирует игру: это подсказка, а не стена.
+ * 3. Центрируется ОБЁРТКОЙ во весь экран, а не своим transform, и не просит
+ *    backdrop-filter. Связка `position: fixed` + `transform: translate(-50%)`
+ *    + `backdrop-filter` — известное больное место Safari, панель там
+ *    случается невидимой. Обёртка не ловит нажатия (`pointer-events: none`),
+ *    поэтому «Играть» под плашкой остаётся доступной: перекрыта только сама
+ *    табличка, а тап по ней и так значит «понял, убери».
+ *
+ * Отладка: `?rotate` в адресе показывает плашку принудительно, на любом
+ * устройстве и в любой ориентации — так вид проверяется отдельно от условия.
  */
 
 /** Сколько значок подмигивает, прежде чем успокоиться. */
@@ -25,22 +32,26 @@ const BLINK_MS = 5000
 const FADE_MS = 400
 
 export function mountRotateHint(): void {
-  // Десктоп мимо: окно там портретным почти не бывает, а поворачивать нечего.
-  if (!window.matchMedia('(pointer: coarse)').matches) return
+  const forced = /[?&]rotate(=|&|$)/.test(window.location.search)
 
-  const el = document.createElement('div')
-  el.className = 'rotate-hint'
-  el.innerHTML = `
-    <svg class="rotate-hint-icon" viewBox="0 0 64 64" aria-hidden="true">
-      <path class="rh-arc" d="M14 26a18 18 0 0 1 36 0" />
-      <path class="rh-tip" d="M45 26l5 1 1-6" />
-      <g class="rh-phone">
-        <rect x="24" y="34" width="16" height="26" rx="3.5" />
-        <line x1="29" y1="55.5" x2="35" y2="55.5" />
-      </g>
-    </svg>
-    <span>Поверните телефон</span>
-    <small>нажмите, чтобы скрыть</small>`
+  // Десктоп мимо: окно там портретным почти не бывает, а поворачивать нечего.
+  if (!forced && !window.matchMedia('(pointer: coarse)').matches) return
+
+  const wrap = document.createElement('div')
+  wrap.className = 'rotate-hint-wrap'
+  wrap.innerHTML = `
+    <div class="rotate-hint">
+      <svg class="rotate-hint-icon" viewBox="0 0 64 64" aria-hidden="true">
+        <path class="rh-arc" d="M14 26a18 18 0 0 1 36 0" />
+        <path class="rh-tip" d="M45 26l5 1 1-6" />
+        <g class="rh-phone">
+          <rect x="24" y="34" width="16" height="26" rx="3.5" />
+          <line x1="29" y1="55.5" x2="35" y2="55.5" />
+        </g>
+      </svg>
+      <span>Поверните телефон</span>
+      <small>нажмите, чтобы скрыть</small>
+    </div>`
 
   let shown = false
   let dismissed = false
@@ -51,26 +62,26 @@ export function mountRotateHint(): void {
     if (shown || dismissed) return
     shown = true
     clearTimeout(removeTimer)
-    document.body.appendChild(el)
-    requestAnimationFrame(() => el.classList.add('show', 'blink'))
-    blinkTimer = window.setTimeout(() => el.classList.remove('blink'), BLINK_MS)
+    document.body.appendChild(wrap)
+    requestAnimationFrame(() => wrap.classList.add('show', 'blink'))
+    blinkTimer = window.setTimeout(() => wrap.classList.remove('blink'), BLINK_MS)
   }
 
   const hide = (): void => {
     if (!shown) return
     shown = false
     clearTimeout(blinkTimer)
-    el.classList.remove('show', 'blink')
-    removeTimer = window.setTimeout(() => el.remove(), FADE_MS)
+    wrap.classList.remove('show', 'blink')
+    removeTimer = window.setTimeout(() => wrap.remove(), FADE_MS)
   }
 
   const sync = (): void => {
-    if (isPortrait()) show()
+    if (forced || isPortrait()) show()
     else hide()
   }
 
-  // Тап — «понял, играю стоя»: убрать и больше не возвращаться.
-  el.addEventListener('pointerdown', () => {
+  // Тап по самой табличке — «понял, играю стоя»: убрать и не возвращаться.
+  wrap.querySelector('.rotate-hint')?.addEventListener('pointerdown', () => {
     dismissed = true
     hide()
   })
