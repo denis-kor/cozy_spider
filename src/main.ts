@@ -3,6 +3,7 @@ import { mountHud } from './app/hud'
 import { resolvePacks } from './app/packs'
 import { ServerAdapter } from './app/platform/server'
 import { mountRadio } from './app/radio'
+import { mountRotateHint } from './app/rotateHint'
 import { mountShop } from './app/shop'
 import { mountStart } from './app/start'
 import { mountViewport, requestFullscreenIfPossible } from './app/viewport'
@@ -146,6 +147,10 @@ async function main(): Promise<void> {
 
   // Игра встречает титульным экраном; сцена уже живёт и просвечивает позади.
   start.open()
+
+  // Телефон в портрете: тихая плашка «поверните» поверх титульника.
+  // Сама уходит — ни игру, ни кнопку «Играть» не перекрывает.
+  mountRotateHint()
 
   // Ручка для отладки из консоли: настройки атмосферы удобнее крутить вживую,
   // чем пересобирать. В прод не попадёт — Vite вырежет ветку по DEV.
