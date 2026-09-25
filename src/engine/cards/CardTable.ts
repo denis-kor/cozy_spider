@@ -20,6 +20,7 @@ import { buildDemoBoard, type DemoKind } from './demoBoards'
 import {
   CARD_ASPECT,
   buildDeckAtlas,
+  cornerIndexBottom,
   type DeckArt,
   type DeckAtlas,
   type DeckLocale,
@@ -289,17 +290,25 @@ export class CardTable {
    * налезали на колонки. Вписывание по ширине сильнее минимума.
    */
   private computeLayout(width: number, height: number): Layout {
-    const sideMargin = Math.max(10, width * 0.018)
-    const gap = Math.max(6, width * 0.011)
+    // Порог 720 px тот же, что у мобильной медиа-запроса в index.html:
+    // числа обязаны ходить парой.
+    const narrow = width <= 720
+
+    // На узком экране поля и зазоры съедают шестую часть ширины, а ширина
+    // здесь — ЕДИНСТВЕННЫЙ источник размера карты: десять колонок обязаны
+    // влезть. Поэтому в портрете поля жмутся почти в ноль, как это делают
+    // портальные пасьянсы: карта вырастает с 31 до 36 px. Воздух по бокам —
+    // роскошь просторного экрана, на телефоне он покупается нечитаемыми
+    // рангами, и это плохая сделка.
+    const sideMargin = narrow ? 4 : Math.max(10, width * 0.018)
+    const gap = narrow ? 2 : Math.max(6, width * 0.011)
 
     // Верх отдан HUD, низ — запасу и собранным последовательностям.
     // Колонки живут строго между ними: карта, уехавшая под кнопку, — это
     // не «мелочь стиля», в неё физически нельзя попасть пальцем.
     //
     // На узком экране HUD переносит кнопки на вторую-третью строку и
-    // занимает уже не 58 px, а под сто двадцать. Порог 720 px тот же, что
-    // у мобильной медиа-запроса в index.html: числа обязаны ходить парой.
-    const narrow = width <= 720
+    // занимает уже не 58 px, а под сто двадцать.
     const topBar = Math.max(narrow ? 118 : 58, height * 0.088)
     // Низ приподнят под укрупнённый лоток: запас должен читаться как
     // «ещё пять раздач», а не как мусор в углу (фидбек тестеров).
@@ -342,17 +351,23 @@ export class CardTable {
       worstFaceUp = Math.max(worstFaceUp, up)
     }
 
+    // Пол перекрытия лицевых карт = высота углового индекса: ранг и масть
+    // обязаны торчать из-под накрывающей карты целиком. Число берётся из
+    // deckAtlas, который этот уголок и рисует, — иначе связь живёт до
+    // первой правки уголка. На мелкой карте индекс укрупняется, поэтому и
+    // полоска шире: на телефоне шаг выходит не 0.30, а 0.33 высоты.
+    const indexBand = cornerIndexBottom(cardW) * 1.04
+
     let faceDownStep = cardH * 0.16
-    let faceUpStep = cardH * 0.30
+    let faceUpStep = cardH * Math.max(0.3, indexBand)
     const needed = worstFaceDown * faceDownStep + worstFaceUp * faceUpStep
     if (needed > available) {
       // Ужимаем перекрытие, но у ЛИЦЕВЫХ карт не режем угловой индекс: ранг
       // и масть обязаны торчать из-под накрывающей карты, иначе стопку не
       // прочитать (запрос дизайнера). Недобор высоты добираем с рубашек —
-      // там достаточно щели, чтобы карта читалась как «ещё одна». Пол faceUp
-      // равен высоте уголка ранг+масть (~0.22 высоты карты, см. drawCorner).
+      // там достаточно щели, чтобы карта читалась как «ещё одна».
       const k = available / needed
-      faceUpStep = Math.max(cardH * 0.22, faceUpStep * k)
+      faceUpStep = Math.max(cardH * indexBand, faceUpStep * k)
       faceDownStep = Math.max(cardH * 0.05, faceDownStep * k)
     }
 

@@ -201,6 +201,35 @@ function cardShape(g: Graphics, w: number, h: number): void {
   g.roundRect(0.5, 0.5, w - 1, h - 1, r).stroke({ color: PAPER_EDGE, width: 1.5 })
 }
 
+/**
+ * Во сколько раз укрупняется угловой индекс на карте шириной `w`.
+ *
+ * Постоянная доля карты работает только на просторном экране. На телефоне
+ * в портрете десять колонок дают карту ~36 px, и ранг при доле 0.19
+ * выходит семь пикселей — не читается вообще. Поэтому чем меньше карта,
+ * тем большую её долю занимает индекс: от 1.0 на картах шире 90 px до 1.5
+ * на самых мелких. Игрок на телефоне видит из-под накрывающей карты ту же
+ * узнаваемую полоску, что и на мониторе, просто более «плакатную».
+ */
+export function cornerScale(w: number): number {
+  const t = Math.min(1, Math.max(0, (90 - w) / (90 - 36)))
+  return 1 + t * 0.5
+}
+
+/**
+ * Нижняя кромка углового индекса в долях ВЫСОТЫ карты.
+ *
+ * Единственный источник правды для пола `faceUpStep` в раскладке: из-под
+ * накрывающей карты ранг и масть обязаны торчать целиком. Раньше порог был
+ * вписан в CardTable числом 0.22 и комментарием «подстроен под drawCorner» —
+ * такая связь живёт ровно до первой правки уголка.
+ */
+export function cornerIndexBottom(w: number): number {
+  // 0.172h — центр значка масти, 0.115w — его размер (половина в долях
+  // высоты: 0.0575w / 1.45 ≈ 0.0397h). Оба растут вместе с cornerScale.
+  return cornerScale(w) * 0.212
+}
+
 function drawCorner(
   parent: Container,
   label: string,
@@ -210,10 +239,11 @@ function drawCorner(
   color: number,
   flip: boolean,
 ): void {
+  const k = cornerScale(w)
   const pad = w * 0.075
-  const fontSize = w * 0.19
+  const fontSize = w * 0.19 * k
 
-  const pipSize = w * 0.115
+  const pipSize = w * 0.115 * k
   // Якорь по центру и поворот на 180°. Отрицательный масштаб при якоре в
   // углу разворачивает глиф ОТ точки привязки, и нижний индекс уезжает за
   // пределы карты — снаружи это читается как чужая карта под текущей.
@@ -222,8 +252,8 @@ function drawCorner(
   // из-под накрывающей карты видна только верхняя полоска, и оба знака
   // обязаны уместиться в неё вместе. Нижняя кромка значка держится выше
   // ~0.215h — под этот порог подстроен пол faceUpStep в раскладке.
-  const cyText = h * 0.068
-  const cyPip = h * 0.172
+  const cyText = h * 0.068 * k
+  const cyPip = h * 0.172 * k
 
   const mirror = (x: number, y: number): [number, number] => (flip ? [w - x, h - y] : [x, y])
 
@@ -317,14 +347,15 @@ function drawIndexTab(
   // Читаемость на тёмном/светлом арте держит обводка бумажного цвета у
   // цифры и «гало» под значком масти. Если не приживётся — вернуть
   // roundRect с PAPER 0.93 и маской карты (см. историю файла).
-  const fontSize = w * 0.2
-  const pipSize = w * 0.125
-  const cx = w * 0.115
+  const k = cornerScale(w)
+  const fontSize = w * 0.2 * k
+  const pipSize = w * 0.125 * k
+  const cx = w * 0.115 * k
   // Тот же поджатый уголок, что у бумажных карт (drawCorner): из-под
   // накрывающей карты ранг и масть должны читаться одинаково независимо
   // от того, лицо это с иллюстрацией или процедурное.
-  const cyText = h * 0.068
-  const cyPip = h * 0.17
+  const cyText = h * 0.068 * k
+  const cyPip = h * 0.17 * k
 
   const mirror = (px: number, py: number): [number, number] =>
     flip ? [w - px, h - py] : [px, py]
