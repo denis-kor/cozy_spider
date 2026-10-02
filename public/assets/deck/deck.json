@@ -17,5 +17,13 @@
     "S12": "faces/S12.webp",
     "S13": "faces/S13.webp"
   },
-  "back": "back.webp"
+  "back": "back.webp",
+  "brightness": 0.75,
+  "outline": {
+    "color": "#a09982",
+    "width": 1
+  },
+  "colors": {
+    "red": "#893225"
+  }
 }

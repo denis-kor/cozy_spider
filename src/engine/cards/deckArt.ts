@@ -30,6 +30,28 @@ export interface DeckManifest {
   back?: string
   /** false — не рисовать угловой индекс: номинал есть в самом арте. */
   index?: boolean
+  /**
+   * Множитель яркости нарисованных лиц и рубашки, 0..1. Экспозиция сцены
+   * (муд, у пруда ×1.18) ложится на карты вместе с фоном: тёмным колодам
+   * она к лицу, а светлый арт с кремовым небом выгорает в белое.
+   */
+  brightness?: number
+  /**
+   * Обводка углового номинала: цвет `#rrggbb` и толщина множителем
+   * (1 — как у всех колод, 0 — без обводки). Не задано — общая бумажная.
+   */
+  outline?: { color?: string; width?: number }
+  /**
+   * Цвета `#rrggbb`: red — червы и бубны, black — пики и трефы, frame —
+   * рамка вокруг арта на лицах и рубашке (по умолчанию бумажная).
+   */
+  colors?: { red?: string; black?: string; frame?: string }
+  /** Звуки колоды, пути от папки колоды. deal — варианты звука раздачи. */
+  sounds?: { deal?: string[] }
+}
+
+function isHex(v: unknown): v is string {
+  return typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(v)
 }
 
 export async function loadDeckArt(
@@ -52,6 +74,26 @@ export async function loadDeckArt(
 
   const art: DeckArt = {}
   if (manifest.index === false) art.hideIndex = true
+  if (typeof manifest.brightness === 'number') art.brightness = manifest.brightness
+  const deal = manifest.sounds?.deal
+  if (Array.isArray(deal)) {
+    const urls = deal.filter((f) => typeof f === 'string').map((f) => versioned(`${baseUrl}/${f}`))
+    if (urls.length > 0) art.dealSounds = urls
+  }
+  const colors = manifest.colors
+  if (colors) {
+    if (isHex(colors.red)) art.red = parseInt(colors.red.slice(1), 16)
+    if (isHex(colors.black)) art.black = parseInt(colors.black.slice(1), 16)
+    if (isHex(colors.frame)) art.frame = parseInt(colors.frame.slice(1), 16)
+  }
+  const outline = manifest.outline
+  if (outline) {
+    art.outline = {}
+    if (isHex(outline.color)) {
+      art.outline.color = parseInt(outline.color.slice(1), 16)
+    }
+    if (typeof outline.width === 'number') art.outline.width = Math.max(0, outline.width)
+  }
   const faces = new Map<string, Texture>()
 
   // Параллельно, а не по одной: полторы дюжины последовательных запросов

@@ -36,7 +36,7 @@ const VK_APP_ID = 54746677
 const SESSION_DAYS = 180
 const MAX_BODY = 256 * 1024
 const MAX_AVATAR = 160 * 1024
-const FREE_SKUS = ['pack.pond', 'deck.pond']
+const FREE_SKUS = ['pack.pond', 'deck.pond', 'deck.frogs']
 /**
  * Приветственный триал: первый ЧАС у нового аккаунта открыт «Салон таро» —
  * сцена и колода. Это НЕ покупка: в таблицу entitlements ничего не пишется,

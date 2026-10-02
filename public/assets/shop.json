@@ -8,13 +8,53 @@
       "desc": "Керосинка, кот в кувшинках, дождь по воде и лофай-радио. Стартовая сцена — бесплатно, навсегда.",
       "price": 0,
       "thumb": "/assets/scene/pond/preview.webp",
-      "preview": "/assets/scene/pond/full.webp"
+      "preview": "/assets/scene/pond/full.webp",
+      "pair": "deck.frogs"
+    },
+    {
+      "id": "deck.frogs",
+      "kind": "deck",
+      "title": "Лягушачий пруд",
+      "desc": "Основная колода: лягушки в кувшинках на тёмной воде, пики-листья, червы-лотосы, трефы-клевер и бубны-кристаллы. Квакает на раздаче. Бесплатно, навсегда.",
+      "price": 0,
+      "deck": "/assets/deck-frogs",
+      "fan": [
+        "back",
+        "S1",
+        "H13",
+        "D12",
+        "C11"
+      ],
+      "cards": [
+        "S1",
+        "H1",
+        "D1",
+        "C1",
+        "S13",
+        "H13",
+        "D13",
+        "C13",
+        "S12",
+        "H12",
+        "D12",
+        "C12"
+      ]
+    },
+    {
+      "id": "pack.kamchatka",
+      "kind": "scene",
+      "title": "Окно на сопку",
+      "desc": "Вечер над Камчаткой: хрущёвка в огнях, кассетник на подоконнике и чёрный котик против заката. Соберёшь пасьянс — сопка проснётся.",
+      "price": 199,
+      "thumb": "/assets/scene/kamchatka/preview.webp",
+      "preview": "/assets/scene/kamchatka/full.webp",
+      "pair": "deck.pond"
     },
     {
       "id": "deck.pond",
       "kind": "deck",
-      "title": "Колода пруда",
-      "desc": "Родная колода: маленькие пейзажи в дождливой сини. Бесплатно, навсегда.",
+      "title": "Пейзажи природы",
+      "desc": "Маленькие пейзажи в дождливой сини. Бесплатно, навсегда.",
       "price": 0,
       "deck": "/assets/deck",
       "fan": [
@@ -47,7 +87,8 @@
       "desc": "Свеча, хрустальный шар и звёздное небо за занавесью. Ночная синь, старое золото и радио гадалки.",
       "price": 199,
       "thumb": "/assets/scene/tarot/preview.webp",
-      "preview": "/assets/scene/tarot/full.webp"
+      "preview": "/assets/scene/tarot/full.webp",
+      "pair": "deck.tarot"
     },
     {
       "id": "deck.tarot",
@@ -78,15 +119,6 @@
         "C12"
       ],
       "preview": "/assets/deck-tarot/preview.webp"
-    },
-    {
-      "id": "pack.kamchatka",
-      "kind": "scene",
-      "title": "Окно на сопку",
-      "desc": "Вечер над Камчаткой: хрущёвка в огнях, кассетник на подоконнике и чёрный котик против заката. Соберёшь пасьянс — сопка проснётся.",
-      "price": 199,
-      "thumb": "/assets/scene/kamchatka/preview.webp",
-      "preview": "/assets/scene/kamchatka/full.webp"
     }
   ]
 }

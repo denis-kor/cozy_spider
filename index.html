@@ -220,13 +220,14 @@
       .shop-title { font-size: 21px; letter-spacing: 0.04em; }
       .shop-close { position: absolute; right: 0; padding: 4px 10px; }
 
+      /* Ряды «сцена — парная колода»: пара в одном ряду сетки, поэтому
+         стоит строго напротив, а карточки ряда тянутся до одной высоты. */
       .shop-list {
         display: grid;
         grid-template-columns: 1fr 1fr;
-        gap: 14px;
-        align-items: start;
+        gap: 12px 14px;
+        align-items: stretch;
       }
-      .shop-col { display: flex; flex-direction: column; gap: 12px; }
       .shop-col-head {
         margin: 0 2px 1px;
         font-size: 11px;
@@ -236,7 +237,9 @@
         color: var(--ink-dim);
       }
       @media (max-width: 480px) {
+        /* Одна колонка: пары идут подряд — сцена, под ней её колода. */
         .shop-list { grid-template-columns: 1fr; }
+        .shop-col-head, .shop-gap { display: none; }
       }
 
       .shop-card {

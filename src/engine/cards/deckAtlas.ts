@@ -64,6 +64,29 @@ export interface DeckArt {
    * номинала — там индекс обязателен.
    */
   hideIndex?: boolean
+  /** Множитель яркости арта (`"brightness"` в deck.json). */
+  brightness?: number
+  /** Обводка углового номинала (`"outline"` в deck.json). */
+  outline?: IndexOutline
+  /** Цвет червей и бубён (`"colors".red` в deck.json). По умолчанию RED. */
+  red?: number
+  /** Цвет пик и треф (`"colors".black`). По умолчанию INK. */
+  black?: number
+  /**
+   * Цвет рамки вокруг арта на лицах и рубашке (`"colors".frame`). По
+   * умолчанию — бумага. Касается только карт с картинкой: процедурные
+   * лица остаются бумажными, на них рамка — это и есть вся карта.
+   */
+  frame?: number
+  /** Варианты звука раздачи (`"sounds".deal`). Нет — раздача беззвучная. */
+  dealSounds?: string[]
+}
+
+export interface IndexOutline {
+  /** Цвет обводки. По умолчанию — бумага. */
+  color?: number
+  /** Толщина множителем: 1 — общая, 0 — без обводки. */
+  width?: number
 }
 
 export const CARD_ASPECT = 1.45
@@ -195,10 +218,21 @@ function ageWear(parent: Container, w: number, h: number, rng: () => number): vo
   parent.addChild(clip, g)
 }
 
-function cardShape(g: Graphics, w: number, h: number): void {
+function cardShape(g: Graphics, w: number, h: number, frame?: number): void {
   const r = w * 0.075
-  g.roundRect(0, 0, w, h, r).fill({ color: PAPER })
-  g.roundRect(0.5, 0.5, w - 1, h - 1, r).stroke({ color: PAPER_EDGE, width: 1.5 })
+  g.roundRect(0, 0, w, h, r).fill({ color: frame ?? PAPER })
+  g.roundRect(0.5, 0.5, w - 1, h - 1, r).stroke({
+    color: frame === undefined ? PAPER_EDGE : shade(frame, 0.82),
+    width: 1.5,
+  })
+}
+
+/** Затемнить цвет: кромка рамки чуть темнее самой рамки, как у бумаги. */
+function shade(color: number, k: number): number {
+  const r = Math.round(((color >> 16) & 0xff) * k)
+  const g = Math.round(((color >> 8) & 0xff) * k)
+  const b = Math.round((color & 0xff) * k)
+  return (r << 16) | (g << 8) | b
 }
 
 /**
@@ -298,7 +332,20 @@ function drawCorner(
  * читается с угловой плашки, и в «Пауке» именно её игрок и читает: у
  * накрытой карты видно только верхнюю полоску.
  */
-function drawArtFace(parent: Container, art: Texture, w: number, h: number, bleed: boolean): void {
+/** Серый tint = умножение цвета: 0.85 гасит арт на 15%, не трогая оттенок. */
+function brightnessTint(v?: number): number {
+  const k = Math.round(Math.min(1, Math.max(0, v ?? 1)) * 255)
+  return (k << 16) | (k << 8) | k
+}
+
+function drawArtFace(
+  parent: Container,
+  art: Texture,
+  w: number,
+  h: number,
+  bleed: boolean,
+  brightness?: number,
+): void {
   const radius = w * 0.075
   // Пейзажная колода (pond) framed под угловой номинал: арт вставляется в
   // окно с кремовым кантом, чтобы фигуры совпадали с числовыми картами.
@@ -311,6 +358,7 @@ function drawArtFace(parent: Container, art: Texture, w: number, h: number, blee
   const fh = bleed ? h : h * 0.952
 
   const sprite = new Sprite(art)
+  sprite.tint = brightnessTint(brightness)
   const scale = Math.max(fw / art.width, fh / art.height)
   sprite.width = art.width * scale
   sprite.height = art.height * scale
@@ -342,7 +390,10 @@ function drawIndexTab(
   h: number,
   color: number,
   flip: boolean,
+  outline?: IndexOutline,
 ): void {
+  const outlineColor = outline?.color ?? PAPER
+  const outlineWidth = outline?.width ?? 1
   // ЭКСПЕРИМЕНТ: плашка убрана — индекс лежит прямо на иллюстрации.
   // Читаемость на тёмном/светлом арте держит обводка бумажного цвета у
   // цифры и «гало» под значком масти. Если не приживётся — вернуть
@@ -368,7 +419,16 @@ function drawIndexTab(
       fontSize,
       fontWeight: '700',
       fill: color,
-      stroke: { color: PAPER, width: Math.max(2, fontSize * 0.14), join: 'round' },
+      // Обводка — настройка колоды: у каждой своя, по умолчанию бумажная.
+      ...(outlineWidth > 0
+        ? {
+            stroke: {
+              color: outlineColor,
+              width: Math.max(1, fontSize * 0.14 * outlineWidth),
+              join: 'round' as const,
+            },
+          }
+        : {}),
     },
   })
   text.anchor.set(0.5)
@@ -378,9 +438,11 @@ function drawIndexTab(
 
   const [px, py] = mirror(cx, cyPip)
   // Обводка для Graphics-значка: чуть больший бумажный силуэт под ним.
-  const halo = new Graphics()
-  drawSuit(halo, suit, px, py, pipSize * 1.28, PAPER, flip)
-  parent.addChild(halo)
+  if (outlineWidth > 0) {
+    const halo = new Graphics()
+    drawSuit(halo, suit, px, py, pipSize * (1 + 0.28 * outlineWidth), outlineColor, flip)
+    parent.addChild(halo)
+  }
   const pip = new Graphics()
   drawSuit(pip, suit, px, py, pipSize, color, flip)
   parent.addChild(pip)
@@ -395,13 +457,9 @@ function buildFace(
   art?: DeckArt,
 ): Container {
   const card = new Container()
-  const color = isRed(suit) ? RED : INK
+  const color = isRed(suit) ? (art?.red ?? RED) : (art?.black ?? INK)
   const labels = style.locale === 'ru' ? RANK_LABELS_RU : RANK_LABELS_EN
   const label = labels[rank]
-
-  const bg = new Graphics()
-  cardShape(bg, w, h)
-  card.addChild(bg)
 
   // Каким рангам положена иллюстрация — решает манифест колоды, а не код:
   // что wire_deck.py опубликовал, то и рисуется. У базовой колоды числовые
@@ -409,14 +467,21 @@ function buildFace(
   // в шум), а у паков вроде таро числовые — часть характера колоды.
   const artwork = art?.faces?.get(faceKey(suit, rank))
 
+  const bg = new Graphics()
+  cardShape(bg, w, h, artwork ? art?.frame : undefined)
+  card.addChild(bg)
+
   if (artwork) {
     // Колода со своим номиналом в арте (index:false) — цельный дизайн карты:
     // рисуем под обрез, без кремового канта и без нашего углового индекса.
     const bleed = !!art?.hideIndex
-    drawArtFace(card, artwork, w, h, bleed)
+    // Бумажный кант гасится вместе с артом: иначе вокруг приглушённой
+    // картинки остаётся яркая рамка и карта читается «в паспарту».
+    bg.tint = brightnessTint(art?.brightness)
+    drawArtFace(card, artwork, w, h, bleed, art?.brightness)
     if (!art?.hideIndex) {
-      drawIndexTab(card, label, suit, w, h, color, false)
-      drawIndexTab(card, label, suit, w, h, color, true)
+      drawIndexTab(card, label, suit, w, h, color, false, art?.outline)
+      drawIndexTab(card, label, suit, w, h, color, true, art?.outline)
     }
     return card
   }
@@ -473,10 +538,21 @@ function buildFace(
 
   ageWear(card, w, h, rng)
 
+  // Яркость колоды гасит и бумажные карты, а не только иллюстрации: иначе
+  // светлые числовые выпадают из приглушённого стола рядом с фигурами.
+  if (art?.brightness !== undefined) card.tint = brightnessTint(art.brightness)
+
   return card
 }
 
-function buildBack(w: number, h: number, art?: Texture, bleed = false): Container {
+function buildBack(
+  w: number,
+  h: number,
+  art?: Texture,
+  bleed = false,
+  brightness?: number,
+  frame?: number,
+): Container {
   const back = new Container()
   const r = w * 0.075
 
@@ -492,11 +568,13 @@ function buildBack(w: number, h: number, art?: Texture, bleed = false): Containe
 
     if (!bleed) {
       const paper = new Graphics()
-      paper.roundRect(0, 0, w, h, r).fill({ color: PAPER })
+      paper.roundRect(0, 0, w, h, r).fill({ color: frame ?? PAPER })
+      paper.tint = brightnessTint(brightness)
       back.addChild(paper)
     }
 
     const sprite = new Sprite(art)
+    sprite.tint = brightnessTint(brightness)
     sprite.width = fw
     sprite.height = fh
     sprite.position.set(fx, fy)
@@ -584,7 +662,7 @@ export function buildDeckAtlas(
       place(buildFace(suit, rank, style, w, h, art), faceKey(suit, rank))
     }
   }
-  place(buildBack(w, h, art?.back, !!art?.hideIndex), 'back')
+  place(buildBack(w, h, art?.back, !!art?.hideIndex, art?.brightness, art?.frame), 'back')
   place(buildSlot(w, h), 'slot')
 
   const cssW = cols * (w + pad) + pad

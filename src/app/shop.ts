@@ -44,6 +44,8 @@ interface CatalogSku {
   cards?: string[]
   /** Колода: запасная картинка-сетка для лайтбокса, если нет списка `cards`. */
   preview?: string
+  /** Сцена: id парной колоды — в витрине она стоит напротив сцены. */
+  pair?: Sku
 }
 
 interface Catalog {
@@ -129,15 +131,7 @@ export function mountShop(root: HTMLElement, adapter: PlatformAdapter, hooks: Sh
     if (!catalog) return
     list.innerHTML = ''
 
-    // Две колонки с заголовками: слева сцены, справа колоды.
-    const columns: Record<CatalogSku['kind'], HTMLElement> = {
-      scene: document.createElement('div'),
-      deck: document.createElement('div'),
-    }
-    columns.scene.className = 'shop-col'
-    columns.deck.className = 'shop-col'
-    columns.scene.innerHTML = '<h3 class="shop-col-head">Сцены</h3>'
-    columns.deck.innerHTML = '<h3 class="shop-col-head">Колоды</h3>'
+    const cards = new Map<Sku, HTMLElement>()
 
     for (const sku of catalog.skus) {
       const card = document.createElement('div')
@@ -279,9 +273,34 @@ export function mountShop(root: HTMLElement, adapter: PlatformAdapter, hooks: Sh
       }
       // Куплен и в игре → без кнопок: активность показывают кант и медальон.
 
-      columns[sku.kind].appendChild(card)
+      cards.set(sku.id, card)
     }
-    list.append(columns.scene, columns.deck)
+
+    // Витрина рядами: сцена слева, её парная колода (`pair`) напротив, в
+    // одном ряду сетки — поэтому пара стоит ровно напротив при любой высоте
+    // карточек. Колоды без пары досыпаются в конец правой колонкой.
+    const head = (text: string): HTMLElement => {
+      const h = document.createElement('h3')
+      h.className = 'shop-col-head'
+      h.textContent = text
+      return h
+    }
+    const gap = (): HTMLElement => {
+      const g = document.createElement('div')
+      g.className = 'shop-gap'
+      return g
+    }
+    list.append(head('Сцены'), head('Колоды'))
+
+    const placed = new Set<Sku>()
+    for (const scene of catalog.skus.filter((s) => s.kind === 'scene')) {
+      const deck = scene.pair ? cards.get(scene.pair) : undefined
+      list.append(cards.get(scene.id)!, deck ?? gap())
+      if (deck) placed.add(scene.pair!)
+    }
+    for (const deck of catalog.skus.filter((s) => s.kind === 'deck' && !placed.has(s.id))) {
+      list.append(gap(), cards.get(deck.id)!)
+    }
   }
 
   // Лайтбокс поверх лавки (z-index 50 в index.html, над лавкой и титульником).
