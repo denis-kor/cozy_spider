@@ -172,6 +172,9 @@ export class CardTable {
   /** Дёргается один раз в момент победы — сцена запускает торжество. */
   onWon?: () => void
 
+  /** Раздача из запаса прошла — колода может отозваться звуком. */
+  onDealt?: () => void
+
   /**
    * Свежая партия (новая игра или рестарт).
    *
@@ -730,6 +733,7 @@ export class CardTable {
     this.sync(true)
 
     if (dealt) {
+      this.onDealt?.()
       // Раздача идёт стаггером, а не залпом (§12).
       const state = this.game.state
       for (let col = 0; col < COLUMNS; col++) {

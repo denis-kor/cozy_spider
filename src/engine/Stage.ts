@@ -5,6 +5,7 @@ import { pickEasySeed } from '../core/rules'
 import type { SuitCount } from '../core/types'
 import { CardTable } from './cards/CardTable'
 import { loadDeckArt } from './cards/deckArt'
+import { SoundSet } from './sfx'
 import { AtmosphereFilter } from './filters/AtmosphereFilter'
 import type { LoadProgress } from './loading'
 import { Celebration, type WinEffect } from './scene/Celebration'
@@ -149,6 +150,11 @@ export class Stage {
     this.app.stage.addChild(this.world)
 
     this.table.onWon = () => this.celebrate()
+    // Звук раздачи — свойство колоды (у лягушек «ква»), у прочих тишина.
+    if (art?.dealSounds) {
+      const dealSound = new SoundSet(art.dealSounds)
+      this.table.onDealt = () => dealSound.play()
+    }
     this.table.onNewDeal = () => this.resetCelebration()
 
     this.cardOcclusion = RenderTexture.create({

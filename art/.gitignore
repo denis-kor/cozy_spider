@@ -20,3 +20,7 @@ scene/kamchatka/cat/
 scene/kamchatka/cut/
 scene/kamchatka/actors/
 scene/kamchatka/tools/
+deck-frogs/faces/*.png
+deck-frogs/back.png
+deck-frogs/_old-*/
+deck/_old-backs/

@@ -17,7 +17,9 @@ const DECK_KEY = 'cozy.pack.deck'
 /** Что доступно без покупки. Дублирует прайс намеренно: выбор пака должен
  *  работать до сети и без каталога. */
 const FREE_SCENE: Sku = 'pack.pond'
-const FREE_DECK: Sku = 'deck.pond'
+// Основная колода — лягушки. Прежняя колода пруда остаётся бесплатной
+// и доступной в лавке, но по умолчанию уже не ставится.
+const FREE_DECK: Sku = 'deck.frogs'
 
 /** Sku сцены -> папка ассетов. Конвенция: `pack.<имя>` -> scene/<имя>. */
 export function sceneUrlFor(sku: Sku): string {

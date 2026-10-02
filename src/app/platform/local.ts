@@ -17,7 +17,7 @@ export const ENTITLEMENTS_KEY = 'cozy.entitlements'
 const SAVE_KEY = 'cozy.save'
 
 /** Что доступно всем без покупки. Стартовая сцена — витрина качества. */
-const FREE: Sku[] = ['pack.pond', 'deck.pond']
+const FREE: Sku[] = ['pack.pond', 'deck.pond', 'deck.frogs']
 
 export class LocalAdapter implements PlatformAdapter {
   private entitlements = new Set<Sku>(FREE)

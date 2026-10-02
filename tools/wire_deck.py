@@ -310,6 +310,17 @@ def main() -> int:
         manifest["index"] = False
 
     path = os.path.join(PUBLIC, "deck.json")
+    # Яркость, обводка, цвета и звуки — ручные настройки колоды, скрипт их не
+    # вычисляет. Переносим из прежнего манифеста, чтобы перепубликация их
+    # не стирала.
+    try:
+        with io.open(path, encoding="utf-8") as f:
+            old = json.load(f)
+        for key in ("brightness", "outline", "colors", "sounds"):
+            if key in old:
+                manifest[key] = old[key]
+    except (OSError, ValueError):
+        pass
     with io.open(path, "w", encoding="utf-8", newline="\n") as f:
         json.dump(manifest, f, ensure_ascii=False, indent=2)
         f.write("\n")
