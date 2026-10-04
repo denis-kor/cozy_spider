@@ -105,6 +105,8 @@ python tools/wire_deck.py
   его части, если арт пришёл JPEG без альфы
 - `tools/gen_procedural_assets.py` — тайлящиеся текстуры, генерятся кодом
 - `tools/make_water_mask.py` — маска воды для плейсхолдера
+- `tools/gen_favicons.py` — иконки сайта (`favicon.ico`, 120/192, apple-touch)
+  из фирменной иконки `art/brand/cozyspider_icon.png`: кот за раскладкой
 
 ## Проверка внешнего вида
 
