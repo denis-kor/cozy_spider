@@ -91,6 +91,42 @@ export class Tweener {
     })
   }
 
+  /**
+   * Подменить конечную точку уже идущих твинов, не трогая их тайминг.
+   *
+   * Нужно, когда раскладка пересчиталась посреди полёта (окно сменило
+   * размер): твин доигрывает к новому месту, а не садит карту в старое.
+   *
+   * `pendingFrom` — новая точка старта для твинов, которые ещё ждут своей
+   * задержки: их `from` снят при заказе, и без подмены карта вылетела бы
+   * из прежнего места (угла колоды до ресайза). Объект переносится туда же
+   * сразу — он стоит в точке старта, пока ждёт.
+   *
+   * Возвращает true, если хоть одно поле нашлось в живом твине.
+   */
+  retarget(
+    target: object,
+    props: Record<string, number>,
+    pendingFrom?: Record<string, number>,
+  ): boolean {
+    const t = target as Record<string, number>
+    let found = false
+    for (const tween of this.tweens) {
+      if (tween.killed || tween.target !== t) continue
+      const pending = tween.delay > 0 && tween.elapsed === 0
+      for (const key of Object.keys(props)) {
+        if (!tween.keys.includes(key)) continue
+        tween.to[key] = props[key]
+        if (pending && pendingFrom && key in pendingFrom) {
+          tween.from[key] = pendingFrom[key]
+          t[key] = pendingFrom[key]
+        }
+        found = true
+      }
+    }
+    return found
+  }
+
   /** Снять все твины объекта, оставив его там, где он сейчас. */
   kill(target: object): void {
     for (const tween of this.tweens) {

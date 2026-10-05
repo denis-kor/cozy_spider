@@ -106,6 +106,15 @@
         padding: 10px 14px;
         box-sizing: border-box;
         flex-wrap: wrap;
+        /* Ровно «normal» для Georgia: (1878 + 449) / 2048 по таблице hhea.
+           На Android Georgia нет, подставляется Noto Serif, а у неё normal —
+           1.36: каждая кнопка вырастала на 3 px, и панель из трёх рядов
+           наезжала на верх колонок на 10 px. Явное число держит HUD одной
+           высоты на любом шрифте; на iOS панель сдвигается меньше чем на 1 px.
+           Только панель, не вся страница: у строк со значками, которых в
+           Georgia нет (✕ ✓ ↗ ₽), «normal» берётся от запасного шрифта, и
+           число на body укорачивало бы на iOS эти кнопки. */
+        line-height: 1.136;
       }
       .hud-top { top: 0; }
 
@@ -131,6 +140,21 @@
         font-size: 22px;
         letter-spacing: 0.04em;
         padding-right: 4px;
+      }
+
+      /* Широкая панель, которой тесно в один ряд (ставит main.ts, только
+         когда плашки уже разъехались на два ряда). Телефон на боку — 800–850 px,
+         ряд с Georgia просит ~837, а на Android Georgia нет: Noto Serif шире,
+         просит ~874, и кнопки уезжали во второй ряд, отъедая высоту у стола.
+         Ужимаем воздух, а не кегль: ~120 px запаса. iPhone 844+ сюда не
+         попадает вовсе; iPhone 812/736 на боку и iPad в портрете попадают —
+         там панель с Georgia тоже переносилась и закрывала верх колонок. */
+      @media (min-width: 721px) {
+        .hud-bar.hud-tight { padding-left: 8px; padding-right: 8px; gap: 8px; }
+        .hud-tight .hud-group { padding-left: 6px; padding-right: 6px; gap: 5px; }
+        .hud-tight .hud-title { padding-right: 0; }
+        .hud-tight button,
+        .hud-tight .hud-seg button { padding-left: 7px; padding-right: 7px; }
       }
 
       .hud-suits {
@@ -557,10 +581,25 @@
         justify-content: center;
         background: rgba(6, 12, 10, 0.42);
         pointer-events: auto;
+        /* Телефон на боку: высота 330–390 px, а плашка ~390 (на Android с
+           Noto Serif ~410). Центр через align-items уводил её за ОБА края —
+           заголовок и ссылки на политику и оферту становились недоступны.
+           Теперь центрирует margin:auto у плашки: пока она помещается — ровно
+           по центру, как было; не помещается — встаёт сверху и листается.
+           Без вертикального padding: с ним плашка, которая помещалась
+           впритык (iPhone на домашнем экране, на боку, 393 px), прижималась
+           к верху и уходила низом за край. */
+        overflow-y: auto;
+        overscroll-behavior: contain;
       }
       .start-overlay.show { display: flex; }
 
       .start-panel {
+        margin: auto;
+        /* Как у HUD: «normal» Georgia числом. С Noto Serif (Android) плашка
+           иначе выходила на ~45 px выше и в горизонтали не влезала, хотя на
+           iPhone 852×393 стоит целиком. Значков вне Georgia тут нет. */
+        line-height: 1.136;
         display: flex;
         flex-direction: column;
         align-items: center;
@@ -732,93 +771,6 @@
         display: none;
       }
       #debug.show { display: block; }
-
-      /* Подсказка «поверните телефон». Плашка, а не стена: игру не
-         перекрывает и уходит от поворота или тапа.
-
-         Центрирует ОБЁРТКА во весь экран, а не transform самой панели, и
-         backdrop-filter здесь нет намеренно: связка fixed + translate(-50%)
-         + backdrop-filter на Safari умеет рисовать пустоту вместо панели.
-         Обёртка не ловит нажатия — «Играть» под плашкой остаётся живой. */
-      .rotate-hint-wrap {
-        position: fixed;
-        inset: 0;
-        z-index: 100;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        pointer-events: none;
-        opacity: 0;
-        transition: opacity 0.4s ease;
-      }
-      .rotate-hint-wrap.show { opacity: 1; }
-
-      .rotate-hint {
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        gap: 14px;
-        padding: 26px 34px 24px;
-        border-radius: 20px;
-        background: rgba(12, 24, 20, 0.88);
-        border: 1px solid var(--edge-strong);
-        box-shadow: 0 18px 44px rgba(0, 0, 0, 0.5);
-        font-size: 21px;
-        letter-spacing: 0.04em;
-        white-space: nowrap;
-        text-align: center;
-        pointer-events: auto;
-        cursor: pointer;
-        transform: translateY(12px);
-        transition: transform 0.4s ease;
-      }
-      .rotate-hint-wrap.show .rotate-hint { transform: none; }
-
-      /* Плашка по центру накрывает «Играть» — подпись объясняет, как убрать. */
-      .rotate-hint small {
-        font-size: 12px;
-        letter-spacing: 0.06em;
-        color: var(--ink-dim);
-        margin-top: -4px;
-      }
-
-      .rotate-hint-icon {
-        width: 64px;
-        height: 64px;
-        flex: none;
-        fill: none;
-        stroke: #d8c9a0;
-        stroke-width: 3;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-      }
-      /* Мигание — секунда на цикл: пять подмигиваний за первые пять секунд.
-         Дальше класс снимается, и плашка просто висит, пока не повернут. */
-      .rotate-hint-wrap.blink .rotate-hint-icon {
-        animation: rh-blink 1s ease-in-out infinite;
-      }
-      /* Телефон встаёт на бок и возвращается — показываем сам жест. */
-      .rotate-hint-icon .rh-phone {
-        transform-origin: 32px 47px;
-        animation: rh-turn 2.4s ease-in-out infinite;
-      }
-      .rotate-hint-icon .rh-arc,
-      .rotate-hint-icon .rh-tip { opacity: 0.75; stroke-width: 2.6; }
-
-      @keyframes rh-blink {
-        0%, 100% { opacity: 1; }
-        50% { opacity: 0.35; }
-      }
-      @keyframes rh-turn {
-        0%, 22% { transform: rotate(0deg); }
-        48%, 74% { transform: rotate(-90deg); }
-        100% { transform: rotate(0deg); }
-      }
-      /* Уважаем системную просьбу не анимировать: значок просто стоит. */
-      @media (prefers-reduced-motion: reduce) {
-        .rotate-hint-wrap.blink .rotate-hint-icon,
-        .rotate-hint-icon .rh-phone { animation: none; }
-      }
 
       @media (max-width: 720px) {
         .hud-title { display: none; }

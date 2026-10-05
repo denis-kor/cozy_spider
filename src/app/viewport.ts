@@ -36,7 +36,26 @@ export function mountViewport(app: Application): void {
   window.visualViewport?.addEventListener('resize', resize)
   // Возврат из фона (свернул-развернул) тоже роняет размеры на iOS.
   window.addEventListener('pageshow', settle)
+
+  // viewport-fit=cover нужен iOS (страница на домашнем экране под чёлкой),
+  // а Chrome на Android применяет его только в полном экране — и заводит
+  // страницу под вырез камеры, где верх HUD и крайние колонки уходят под
+  // него. Безопасные зоны мы нигде не отступаем, поэтому на время полного
+  // экрана cover снимаем: Chrome оставит вырез чёрной полосой. На iPhone
+  // Fullscreen API нет, событие там не приходит, и мета-тег не трогается.
+  const meta = document.querySelector<HTMLMetaElement>('meta[name="viewport"]')
+  const original = meta?.content ?? ''
+  document.addEventListener('fullscreenchange', () => {
+    if (!meta) return
+    meta.content = document.fullscreenElement
+      ? original.replace(/,\s*viewport-fit=cover/, '')
+      : original
+    settle()
+  })
 }
+
+/** Дольше полного экрана не ждём: отказ или зависший промис не держат игру. */
+const FULLSCREEN_WAIT_MS = 700
 
 /**
  * Попросить полный экран, если платформа умеет и это сенсорное устройство.
@@ -45,22 +64,40 @@ export function mountViewport(app: Application): void {
  * пользовательской активации. На iPhone Safari метода нет: молча выходим,
  * там работает «на домашний экран». На десктопе не трогаем — незваный
  * полный экран там пугает.
+ *
+ * Промис разрешается, когда окно доехало до нового размера (или сразу, если
+ * полного экрана не будет). Стартовую раздачу пускать после него: на Android
+ * в горизонтали карта в полном экране вырастает на треть-половину, атлас
+ * пересобирается, и раздача, начатая раньше, обрывалась на полпути.
  */
-export function requestFullscreenIfPossible(): void {
+export function requestFullscreenIfPossible(): Promise<void> {
   try {
     const coarse = window.matchMedia('(pointer: coarse)').matches
-    if (!coarse) return
-    if (document.fullscreenElement) return
+    if (!coarse) return Promise.resolve()
+    if (document.fullscreenElement) return Promise.resolve()
 
     const el = document.documentElement as HTMLElement & {
       webkitRequestFullscreen?: () => Promise<void> | void
     }
+    let entered: Promise<unknown>
     if (el.requestFullscreen) {
-      void Promise.resolve(el.requestFullscreen()).catch(() => {})
+      entered = el.requestFullscreen()
     } else if (el.webkitRequestFullscreen) {
-      el.webkitRequestFullscreen()
+      entered = Promise.resolve(el.webkitRequestFullscreen())
+    } else {
+      return Promise.resolve()
     }
+
+    // Вход в полный экран — ещё не новый размер: resize приходит следом,
+    // а Pixi пересчитывает канвас на ближайшем кадре. Два кадра с запасом.
+    const settled = entered
+      .then(() => new Promise<void>((r) => setTimeout(r, 120)))
+      .then(() => new Promise<void>((r) => requestAnimationFrame(() => requestAnimationFrame(() => r()))))
+      .catch(() => {})
+    const cap = new Promise<void>((r) => setTimeout(r, FULLSCREEN_WAIT_MS))
+    return Promise.race([settled, cap])
   } catch {
     // Не поддержано или заблокировано — не беда, игра и так на весь вьюпорт.
+    return Promise.resolve()
   }
 }

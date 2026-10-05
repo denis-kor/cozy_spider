@@ -37,8 +37,13 @@ import { drawSuit } from './suits'
 export type DeckLocale = 'en' | 'ru'
 
 export interface DeckStyle {
-  /** Логическая ширина карты. Высота считается по CARD_ASPECT. */
+  /** Логическая ширина карты. Высота — по cardAspect(compact). */
   cardWidth: number
+  /**
+   * Телефонная карта: вытянутая, индекс на своей шапке, арт ниже целиком.
+   * Решает раскладка (см. COMPACT_CORNER_W), атлас только исполняет.
+   */
+  compact?: boolean
   locale: DeckLocale
   /** Резкость растеризации. Клампится так же, как DPR сцены. */
   resolution: number
@@ -258,10 +263,114 @@ export function cornerScale(w: number): number {
  * вписан в CardTable числом 0.22 и комментарием «подстроен под drawCorner» —
  * такая связь живёт ровно до первой правки уголка.
  */
-export function cornerIndexBottom(w: number): number {
+export function cornerIndexBottom(w: number, compact = false): number {
+  if (compact) return COMPACT_HEADER / COMPACT_ASPECT
   // 0.172h — центр значка масти, 0.115w — его размер (половина в долях
   // высоты: 0.0575w / 1.45 ≈ 0.0397h). Оба растут вместе с cornerScale.
   return cornerScale(w) * 0.212
+}
+
+/**
+ * Ширина карты, ниже которой раскладка переходит на «телефонную» карту.
+ *
+ * Десять колонок в портрете дают карту ~36 px, и даже укрупнённый в
+ * полтора раза столбик «ранг над мастью» выходит рангом в десять
+ * пикселей. Портальные пасьянсы решают это одинаково: ранг и масть встают
+ * В ОДНУ СТРОКУ поперёк всей карты, ранг почти в половину её ширины.
+ *
+ * Решает раскладка (CardTable.computeLayout) и только по ширине: мельче
+ * 44 px (MIN_CARD_W) карта бывает лишь тогда, когда упёрлась в десять
+ * колонок, то есть в портрете телефона. При пороге 56 горизонтальный
+ * телефон на втором проходе подбора размера проваливался в телефонный
+ * режим и карта ужималась с 57 до 46 px. Атлас получает готовый флаг
+ * `compact` и порог сам не сравнивает: иначе раскладка и атлас округляли
+ * бы ширину по-разному и на самой границе расходились.
+ */
+export const COMPACT_CORNER_W = 44
+
+// Геометрия телефонной карты в долях её ШИРИНЫ: ширина у неё — единственная
+// данность, высота выводится из шапки и окна арта.
+const C_PAD = 0.07
+const C_FONT = 0.46
+const C_PIP = 0.28
+const C_GAP = 0.04
+/**
+ * Где стоит центр строки ранга и где кончается сам индекс.
+ *
+ * Текст с якорем 0.5 стоит центром строки: у Georgia 600 высота строки
+ * 0.92em над базовой линией и 0.22em под ней, так что база лежит на 0.35em
+ * ниже центра. Заглавные (A, K, Q, J) поднимаются на 0.71em над базой, то
+ * есть до 0.36em над центром, обводка добавляет ~0.07em — верх индекса на
+ * 0.43em выше центра. Цифры Georgia старого стиля: 3, 4, 5, 7, 9 и Q уходят
+ * хвостом на 0.18–0.2em под базу — с обводкой низ индекса на 0.62em ниже
+ * центра. Замерено measureText в браузере.
+ *
+ * Первая версия ставила центр на полкегля от кромки, а низ считала по
+ * 0.42em: сверху пропадал воздух, снизу хвосты цифр заезжали на арт.
+ */
+const C_TEXT_Y = C_PAD + C_FONT * 0.43
+const C_INDEX_BOTTOM = Math.max(C_TEXT_Y + C_FONT * 0.62, C_TEXT_Y + C_PIP / 2)
+/** Высота шапки с индексом: низ индекса плюс воздух до окна арта. */
+const COMPACT_HEADER = C_INDEX_BOTTOM + 0.03
+
+// Окно арта — то же, что на обычной карте (drawArtFace): кант 0.035 по
+// бокам, а высота такая, что картинка ложится в окно в тех же
+// пропорциях и с той же обрезкой, что на десктопе.
+const ART_X = 0.035
+const ART_W = 0.93
+const ART_H = CARD_ASPECT * 0.952
+const ART_BOTTOM = CARD_ASPECT * 0.024
+
+/**
+ * Пропорция телефонной карты: шапка + окно арта целиком + нижний кант.
+ *
+ * Крупный индекс поверх арта обычной карты садился у лягушачьей колоды
+ * прямо на верхний ряд лягушек — номинал и картинка налезали друг на
+ * друга. Шире карта стать не может (десять колонок), а высоты в портрете
+ * полэкрана: карта вытягивается, индекс получает свою полоску на рамке, и
+ * арт виден целиком, ничем не накрыт.
+ */
+export const COMPACT_ASPECT = COMPACT_HEADER + ART_H + ART_BOTTOM
+
+/** Пропорция карты в режиме раскладки. */
+export function cardAspect(compact: boolean): number {
+  return compact ? COMPACT_ASPECT : CARD_ASPECT
+}
+
+interface CompactCorner {
+  fontSize: number
+  pipSize: number
+  /** Центр ранга и центр масти. */
+  tx: number
+  ty: number
+  px: number
+  py: number
+  /** Шире ранг не пускаем: «10» обязан уместиться рядом с мастью. */
+  maxTextW: number
+  /** Нижняя кромка шапки в px от верха карты — здесь начинается окно арта. */
+  header: number
+}
+
+function compactCorner(w: number): CompactCorner {
+  const pad = w * C_PAD
+  const pipSize = w * C_PIP
+  const gap = w * C_GAP
+  const ty = w * C_TEXT_Y
+  return {
+    fontSize: w * C_FONT,
+    pipSize,
+    tx: pad + (w - pad * 2 - pipSize - gap) / 2,
+    ty,
+    px: w - pad - pipSize / 2,
+    py: ty,
+    maxTextW: w - pad * 2 - pipSize - gap,
+    header: w * COMPACT_HEADER,
+  }
+}
+
+/** Ужать ранг по ширине, если «10» не влез рядом с мастью. */
+function fitText(text: Text, maxW: number): void {
+  if (text.width > maxW) text.scale.set(maxW / text.width)
 }
 
 function drawCorner(
@@ -272,26 +381,41 @@ function drawCorner(
   h: number,
   color: number,
   flip: boolean,
+  compact = false,
 ): void {
   const k = cornerScale(w)
   const pad = w * 0.075
-  const fontSize = w * 0.19 * k
+  let fontSize = w * 0.19 * k
 
-  const pipSize = w * 0.115 * k
+  let pipSize = w * 0.115 * k
   // Якорь по центру и поворот на 180°. Отрицательный масштаб при якоре в
   // углу разворачивает глиф ОТ точки привязки, и нижний индекс уезжает за
   // пределы карты — снаружи это читается как чужая карта под текущей.
-  const cx = pad + pipSize * 0.62
+  let textX = pad + pipSize * 0.62
+  let pipX = textX
   // Ранг и масть подтянуты к верхней кромке и друг к другу: в «Пауке»
   // из-под накрывающей карты видна только верхняя полоска, и оба знака
   // обязаны уместиться в неё вместе. Нижняя кромка значка держится выше
   // ~0.215h — под этот порог подстроен пол faceUpStep в раскладке.
-  const cyText = h * 0.068 * k
-  const cyPip = h * 0.172 * k
+  let cyText = h * 0.068 * k
+  let cyPip = h * 0.172 * k
+  let maxTextW = Infinity
+
+  // Мелкая карта (телефон) — ранг и масть в строку, см. COMPACT_CORNER_W.
+  if (compact) {
+    const c = compactCorner(w)
+    fontSize = c.fontSize
+    pipSize = c.pipSize
+    textX = c.tx
+    pipX = c.px
+    cyText = c.ty
+    cyPip = c.py
+    maxTextW = c.maxTextW
+  }
 
   const mirror = (x: number, y: number): [number, number] => (flip ? [w - x, h - y] : [x, y])
 
-  const [tx, ty] = mirror(cx, cyText)
+  const [tx, ty] = mirror(textX, cyText)
   const text = new Text({
     text: label,
     style: {
@@ -306,9 +430,10 @@ function drawCorner(
   text.anchor.set(0.5)
   text.position.set(tx, ty)
   text.rotation = flip ? Math.PI : 0
+  fitText(text, maxTextW)
   parent.addChild(text)
 
-  const [px, py] = mirror(cx, cyPip)
+  const [px, py] = mirror(pipX, cyPip)
   const pip = new Graphics()
   drawSuit(pip, suit, px, py, pipSize, color, flip)
   parent.addChild(pip)
@@ -345,6 +470,8 @@ function drawArtFace(
   h: number,
   bleed: boolean,
   brightness?: number,
+  /** Окно арта вместо стандартного (телефонная карта: арт под шапкой). */
+  window?: { x: number; y: number; w: number; h: number },
 ): void {
   const radius = w * 0.075
   // Пейзажная колода (pond) framed под угловой номинал: арт вставляется в
@@ -352,10 +479,10 @@ function drawArtFace(
   // Колода-цельный-дизайн (таро, index:false) несёт собственный кант прямо
   // в арте — там рисуем ПОД ОБРЕЗ: иначе поверх родной рамки ложится ещё и
   // кремовая, карта получает двойную рамку (запрос дизайнера — убрать её).
-  const fx = bleed ? 0 : w * 0.035
-  const fy = bleed ? 0 : h * 0.024
-  const fw = bleed ? w : w * 0.93
-  const fh = bleed ? h : h * 0.952
+  const fx = window ? window.x : bleed ? 0 : w * 0.035
+  const fy = window ? window.y : bleed ? 0 : h * 0.024
+  const fw = window ? window.w : bleed ? w : w * 0.93
+  const fh = window ? window.h : bleed ? h : h * 0.952
 
   const sprite = new Sprite(art)
   sprite.tint = brightnessTint(brightness)
@@ -391,6 +518,7 @@ function drawIndexTab(
   color: number,
   flip: boolean,
   outline?: IndexOutline,
+  compact = false,
 ): void {
   const outlineColor = outline?.color ?? PAPER
   const outlineWidth = outline?.width ?? 1
@@ -399,19 +527,32 @@ function drawIndexTab(
   // цифры и «гало» под значком масти. Если не приживётся — вернуть
   // roundRect с PAPER 0.93 и маской карты (см. историю файла).
   const k = cornerScale(w)
-  const fontSize = w * 0.2 * k
-  const pipSize = w * 0.125 * k
-  const cx = w * 0.115 * k
+  let fontSize = w * 0.2 * k
+  let pipSize = w * 0.125 * k
+  let textX = w * 0.115 * k
+  let pipX = textX
   // Тот же поджатый уголок, что у бумажных карт (drawCorner): из-под
   // накрывающей карты ранг и масть должны читаться одинаково независимо
   // от того, лицо это с иллюстрацией или процедурное.
-  const cyText = h * 0.068 * k
-  const cyPip = h * 0.17 * k
+  let cyText = h * 0.068 * k
+  let cyPip = h * 0.17 * k
+  let maxTextW = Infinity
+
+  if (compact) {
+    const c = compactCorner(w)
+    fontSize = c.fontSize
+    pipSize = c.pipSize
+    textX = c.tx
+    pipX = c.px
+    cyText = c.ty
+    cyPip = c.py
+    maxTextW = c.maxTextW
+  }
 
   const mirror = (px: number, py: number): [number, number] =>
     flip ? [w - px, h - py] : [px, py]
 
-  const [tx, ty] = mirror(cx, cyText)
+  const [tx, ty] = mirror(textX, cyText)
   const text = new Text({
     text: label,
     style: {
@@ -434,9 +575,10 @@ function drawIndexTab(
   text.anchor.set(0.5)
   text.position.set(tx, ty)
   text.rotation = flip ? Math.PI : 0
+  fitText(text, maxTextW)
   parent.addChild(text)
 
-  const [px, py] = mirror(cx, cyPip)
+  const [px, py] = mirror(pipX, cyPip)
   // Обводка для Graphics-значка: чуть больший бумажный силуэт под ним.
   if (outlineWidth > 0) {
     const halo = new Graphics()
@@ -457,6 +599,7 @@ function buildFace(
   art?: DeckArt,
 ): Container {
   const card = new Container()
+  const compact = !!style.compact
   const color = isRed(suit) ? (art?.red ?? RED) : (art?.black ?? INK)
   const labels = style.locale === 'ru' ? RANK_LABELS_RU : RANK_LABELS_EN
   const label = labels[rank]
@@ -478,6 +621,20 @@ function buildFace(
     // Бумажный кант гасится вместе с артом: иначе вокруг приглушённой
     // картинки остаётся яркая рамка и карта читается «в паспарту».
     bg.tint = brightnessTint(art?.brightness)
+    if (compact && !bleed) {
+      // Телефонная карта: индекс на своей полоске рамки, арт ниже целиком
+      // (см. COMPACT_ASPECT). Нижнего уголка нет — он лёг бы на арт, а
+      // верхний и так виден у любой карты колонки.
+      const header = compactCorner(w).header
+      drawArtFace(card, artwork, w, h, false, art?.brightness, {
+        x: w * ART_X,
+        y: header,
+        w: w * ART_W,
+        h: h - header - w * ART_BOTTOM,
+      })
+      drawIndexTab(card, label, suit, w, h, color, false, art?.outline, true)
+      return card
+    }
     drawArtFace(card, artwork, w, h, bleed, art?.brightness)
     if (!art?.hideIndex) {
       drawIndexTab(card, label, suit, w, h, color, false, art?.outline)
@@ -493,10 +650,21 @@ function buildFace(
   const rng = agedRng(suit.charCodeAt(0) * 131 + rank * 17)
   agePaper(card, w, h, rng)
 
-  drawCorner(card, label, suit, w, h, color, false)
-  drawCorner(card, label, suit, w, h, color, true)
+  // На телефонной карте нижний перевёрнутый уголок не нужен: верхний виден
+  // и у накрытой карты, и у последней в колонке.
+  drawCorner(card, label, suit, w, h, color, false, compact)
+  if (!compact) drawCorner(card, label, suit, w, h, color, true)
 
-  if (rank === 1) {
+  if (compact) {
+    // Пипсы в 35-пиксельной карте — рябь, а глиф фигуры повторяет индекс.
+    // Портальные пасьянсы ставят под индексом один крупный значок масти:
+    // масть читается с расстояния вытянутой руки.
+    const header = compactCorner(w).header
+    const free = h - header
+    const big = new Graphics()
+    drawSuit(big, suit, w / 2, header + free * 0.5, Math.min(w * 0.62, free * 0.75), color)
+    card.addChild(big)
+  } else if (rank === 1) {
     const ace = new Graphics()
     drawSuit(ace, suit, w / 2, h / 2, w * 0.46, color)
     card.addChild(ace)
@@ -573,11 +741,16 @@ function buildBack(
       back.addChild(paper)
     }
 
+    // Cover, а не растяжка в окно: на обычной карте пропорции рубашки и
+    // окна совпадают и разницы нет, а телефонная карта вытянута — растяжка
+    // сплющила бы рисунок, cover срезает лишнее по бокам.
     const sprite = new Sprite(art)
     sprite.tint = brightnessTint(brightness)
-    sprite.width = fw
-    sprite.height = fh
-    sprite.position.set(fx, fy)
+    const scale = Math.max(fw / art.width, fh / art.height)
+    sprite.width = art.width * scale
+    sprite.height = art.height * scale
+    sprite.anchor.set(0.5)
+    sprite.position.set(fx + fw / 2, fy + fh / 2)
 
     const clip = new Graphics()
     clip.roundRect(fx, fy, fw, fh, bleed ? r : r * 0.8).fill({ color: 0xffffff })
@@ -637,7 +810,7 @@ export function buildDeckAtlas(
   art?: DeckArt,
 ): DeckAtlas {
   const w = Math.round(style.cardWidth)
-  const h = Math.round(style.cardWidth * CARD_ASPECT)
+  const h = Math.round(style.cardWidth * cardAspect(!!style.compact))
   const cols = 9
   const rows = 6
   // Зазор между ячейками. Без него билинейная фильтрация на краю спрайта

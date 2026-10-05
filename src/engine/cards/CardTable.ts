@@ -18,8 +18,9 @@ import { Tweener, easing } from '../anim'
 import { CardView } from './CardView'
 import { buildDemoBoard, type DemoKind } from './demoBoards'
 import {
-  CARD_ASPECT,
+  COMPACT_CORNER_W,
   buildDeckAtlas,
+  cardAspect,
   cornerIndexBottom,
   type DeckArt,
   type DeckAtlas,
@@ -37,6 +38,14 @@ export interface TableOptions {
 interface Layout {
   cardW: number
   cardH: number
+  /**
+   * Телефонная карта (см. COMPACT_CORNER_W): вытянутая, индекс на шапке.
+   * Решается здесь один раз и передаётся атласу — порог не сравнивается
+   * в двух местах с разным округлением.
+   */
+  compact: boolean
+  /** Высота карты к ширине: CARD_ASPECT или COMPACT_ASPECT. */
+  aspect: number
   originX: number
   originY: number
   columnStep: number
@@ -58,6 +67,8 @@ interface DragState {
   cards: CardView[]
   from: number
   count: number
+  /** Палец, который тащит: отмену чужого касания (второй палец) не слушаем. */
+  pointerId: number
   grabX: number
   grabY: number
   lastX: number
@@ -175,6 +186,9 @@ export class CardTable {
   private selected: { column: number; count: number } | null = null
   private stockPile = new Container()
   private atlasCardW = 0
+  private atlasCompact = false
+  /** Нижний край видимой панели HUD в px окна (см. setTopInset). */
+  private topInset = 0
   /** Стол взведён под стартовую раздачу: колода ждёт стопкой в углу. */
   private dealPending = false
 
@@ -211,6 +225,13 @@ export class CardTable {
     this.root.on('pointermove', this.onPointerMove)
     this.root.on('pointerup', this.onPointerUp)
     this.root.on('pointerupoutside', this.onPointerUp)
+    // Pixi v8 на pointer-событиях pointercancel не слушает вовсе — ловим сами
+    // (см. onPointerCancel). Уход вкладки в фон посреди перетаскивания тоже
+    // обрывает касание без pointerup.
+    globalThis.addEventListener('pointercancel', this.onPointerCancel, true)
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden) this.onPointerCancel()
+    })
   }
 
   /**
@@ -220,34 +241,52 @@ export class CardTable {
    * на 160 — это мыло на подписях рангов. Пересборка идёт только при
    * заметном изменении размера, а не на каждый пиксель ресайза.
    */
-  private ensureAtlas(cardW: number): void {
-    const target = Math.round(cardW)
-    if (this.atlas && Math.abs(target - this.atlasCardW) / this.atlasCardW < 0.25) return
+  private ensureAtlas(layout: Layout): void {
+    const target = Math.round(layout.cardW)
+    // Смена режима карты пересобирает атлас при любом шаге ширины: у
+    // телефонной карты другая пропорция и другой уголок, и атлас старой
+    // формы растянулся бы по высоте и прятал ранг под накрывающей картой.
+    if (
+      this.atlas &&
+      Math.abs(target - this.atlasCardW) / this.atlasCardW < 0.25 &&
+      layout.compact === this.atlasCompact
+    ) {
+      return
+    }
 
-    const old = this.atlas
+    // Старый атлас освобождается ДО сборки нового. Раньше оба жили разом, и
+    // на Android, где «Играть» включает полный экран и карта вырастает на
+    // треть-половину (пересборка), пик видеопамяти выходил двойным.
+    if (this.atlas) {
+      this.rebuildViews()
+      this.atlas.destroy()
+    }
     this.atlas = buildDeckAtlas(
       this.renderer,
       // Атлас печётся минимум в 2x независимо от DPR экрана: на обычном
       // мониторе (DPR 1) это суперсэмплинг — вывод в размер карты идёт
       // усреднением четырёх текселей, и тонкая гравюра арта не рябит.
       // Для retina (DPR 2) это и есть нативный размер.
-      { cardWidth: target, locale: this.locale, resolution: Math.max(2, this.resolution) },
+      {
+        cardWidth: target,
+        compact: layout.compact,
+        locale: this.locale,
+        resolution: Math.max(2, this.resolution),
+      },
       this.art,
     )
     this.atlasCardW = target
+    this.atlasCompact = layout.compact
 
     if (this.shadowTexture) this.shadowTexture.destroy(true)
     this.shadowTexture = makeShadowTexture(
       this.renderer,
       target,
-      Math.round(target * CARD_ASPECT),
+      Math.round(target * layout.aspect),
       1,
     )
 
-    if (old) {
-      this.rebuildViews()
-      old.destroy()
-    }
+
   }
 
   private rebuildViews(): void {
@@ -276,6 +315,16 @@ export class CardTable {
     return view
   }
 
+  /**
+   * Нижний край панели HUD в px окна. Зовёт app (ResizeObserver на панели):
+   * её высота зависит от шрифта и переносов, а раскладка о DOM не знает.
+   */
+  setTopInset(px: number): void {
+    if (Math.abs(px - this.topInset) < 0.5) return
+    this.topInset = px
+    if (this.viewW > 0) this.resize(this.viewW, this.viewH)
+  }
+
   resize(width: number, height: number): void {
     this.viewW = width
     this.viewH = height
@@ -284,7 +333,7 @@ export class CardTable {
     // проваливался бы мимо.
     this.root.hitArea = new Rectangle(0, 0, width, height)
     this.layout = this.computeLayout(width, height)
-    this.ensureAtlas(this.layout.cardW)
+    this.ensureAtlas(this.layout)
     this.drawScrim()
     this.drawSlots()
     this.sync(false)
@@ -297,9 +346,10 @@ export class CardTable {
    * одновременно. Перекрытие карт сжимается вертикально, пока самая
    * длинная колонка не влезет в высоту.
    *
-   * Портретная ориентация на телефоне остаётся некомфортной (§12): при
-   * ширине ~390 px карта выходит ~31 px, ранги читаются с трудом — поэтому
-   * в портрете игра и просит повернуть телефон (app/rotateHint). Но
+   * Портрет телефона (§12): при ширине ~390 px карта выходит ~36 px.
+   * Читаемость держит телефонная карта (COMPACT_CORNER_W): ранг и масть
+   * крупно на своей шапке, арт под ней; подсказку «поверните телефон»
+   * после неё убрали.
    * НЕПРАВИЛЬНОЙ раскладка быть не должна: MIN_CARD_W раньше стоял выше
    * вписывания, доска выходила шире экрана (494 px против 390), левая
    * колонка срезалась краем, а запас и лоток уезжали за правый край и
@@ -325,7 +375,19 @@ export class CardTable {
     //
     // На узком экране HUD переносит кнопки на вторую-третью строку и
     // занимает уже не 58 px, а под сто двадцать.
-    const topBar = Math.max(narrow ? 118 : 58, height * 0.088)
+    // Отступ колонок от верхней полосы — им же ниже считается originY.
+    const topGap = Math.max(6, height * 0.012)
+    // Константы 58/118 подобраны под Georgia, а HUD — DOM со своим шрифтом.
+    // На Android Georgia нет, Noto Serif шире, и в горизонтали ряд кнопок
+    // переносился во второй ряд: панель закрывала верх колонок и забирала
+    // тапы по ним. topInset — фактический низ панели (setTopInset); колонки
+    // уступают ему (с воздухом 4 px), только если он залезает ниже их верха,
+    // поэтому там, где HUD и так помещается (iPhone), раскладка не
+    // сдвигается ни на пиксель — даже на долю: на коротком экране «+4»
+    // само по себе перевешивало бы константу.
+    const baseTopBar = Math.max(narrow ? 118 : 58, height * 0.088)
+    const topBar =
+      this.topInset > baseTopBar + topGap ? this.topInset + 4 - topGap : baseTopBar
     // Низ приподнят под укрупнённый лоток: запас должен читаться как
     // «ещё пять раздач», а не как мусор в углу (фидбек тестеров).
     //
@@ -347,6 +409,13 @@ export class CardTable {
     const fitCardW = usable / COLUMNS
     const byWidth = Math.min(fitCardW, Math.max(MIN_CARD_W, maxCardW))
 
+    // Телефонная карта — только когда карту сжала ширина (десять колонок),
+    // и решается ДО подбора по высоте: иначе второй проход подбора мог бы
+    // перескочить порог и сменить пропорцию на полпути. Колода с номиналом
+    // в арте (таро, index:false) остаётся обычной — своя шапка ей не нужна.
+    const compact = fitCardW < COMPACT_CORNER_W && !this.art?.hideIndex
+    const aspect = cardAspect(compact)
+
     // Второй потолок — ПО ВЫСОТЕ: длинная колонка обязана помещаться
     // целиком, а не уползать за нижний край.
     //
@@ -362,24 +431,24 @@ export class CardTable {
     // На просторных экранах потолок не срабатывает вовсе: в портрете
     // телефона он даёт 89 px против 36 по ширине, на десктопе 152 против
     // 109. Это ограничитель для низких окон, а не новая раскладка.
-    const columnRoom = height - topBar - Math.max(6, height * 0.012) - bottomBar
+    const columnRoom = height - topBar - topGap - bottomBar
     // indexBand зависит от ширины карты (уголок на мелкой крупнее), а
     // ширина — от indexBand. Двух проходов хватает: величина меняется
     // медленно, и второй уже попадает в доли пикселя.
     let byHeight = byWidth
     for (let pass = 0; pass < 2; pass++) {
-      const band = cornerIndexBottom(byHeight) * 1.04
+      const band = cornerIndexBottom(byHeight, compact) * 1.04
       const maxH = columnRoom / (1 + REF_FACE_DOWN * 0.05 + REF_FACE_UP * band)
-      byHeight = Math.min(byWidth, maxH / CARD_ASPECT)
+      byHeight = Math.min(byWidth, maxH / aspect)
     }
 
     const cardW = byHeight
-    const cardH = cardW * CARD_ASPECT
+    const cardH = cardW * aspect
 
     const columnStep = cardW + gap
     const boardW = columnStep * COLUMNS - gap
     const originX = (width - boardW) / 2 + cardW / 2
-    const originY = topBar + cardH / 2 + Math.max(6, height * 0.012)
+    const originY = topBar + cardH / 2 + topGap
 
     // Динамическое перекрытие (§12).
     //
@@ -404,12 +473,23 @@ export class CardTable {
     // deckAtlas, который этот уголок и рисует, — иначе связь живёт до
     // первой правки уголка. На мелкой карте индекс укрупняется, поэтому и
     // полоска шире: на телефоне шаг выходит не 0.30, а 0.33 высоты.
-    const indexBand = cornerIndexBottom(cardW) * 1.04
+    const indexBand = cornerIndexBottom(cardW, compact) * 1.04
 
     let faceDownStep = cardH * 0.16
     let faceUpStep = cardH * Math.max(0.3, indexBand)
     const needed = worstFaceDown * faceDownStep + worstFaceUp * faceUpStep
-    if (needed > available) {
+    if (narrow && height > width && needed < available) {
+      // Телефон в портрете: карта упёрлась в ширину (десять колонок), а
+      // под столом полэкрана пустой воды. Колонки сидели комком у HUD, и
+      // стол читался как «поле большое, карты мелкие». Свободную высоту
+      // отдаём шагам: из-под каждой открытой карты видно больше арта, и
+      // полоска под палец толще. Потолки — чтобы короткая колонка не
+      // превращалась в лесенку из отдельно лежащих карт.
+      // Не меньше единицы: ужимать ниже пола индекса этот путь не вправе.
+      const grow = Math.max(1, (available * 0.9) / needed)
+      faceDownStep = Math.min(faceDownStep * grow, cardH * 0.24)
+      faceUpStep = Math.min(faceUpStep * grow, cardH * 0.5)
+    } else if (needed > available) {
       // Сжимаем не всё подряд одним коэффициентом, а по приоритету.
       //
       // Раньше общий коэффициент применялся и к рубашкам, и к лицам, а у
@@ -446,18 +526,20 @@ export class CardTable {
     // обрезанные «слишком маленькие карты в углу».
     // +15% по фидбеку: карты лотка казались мелковаты. Потолок cardW
     // остаётся — лоток не должен спорить с игровыми картами.
-    const trayCardW = Math.min(cardW, ((bottomBar - 12) / CARD_ASPECT) * 1.15)
+    const trayCardW = Math.min(cardW, ((bottomBar - 12) / aspect) * 1.15)
 
     // Укрупнённая карта уже не помещается в полосу целиком, поэтому центр
     // лотка не середина полосы, а «как можно ниже, но с полем 6 px».
     const trayY = Math.min(
       height - bottomBar * 0.5,
-      height - (trayCardW * CARD_ASPECT) / 2 - 6,
+      height - (trayCardW * aspect) / 2 - 6,
     )
 
     return {
       cardW,
       cardH,
+      compact,
+      aspect,
       originX,
       originY,
       columnStep,
@@ -467,7 +549,13 @@ export class CardTable {
       topBar,
       bottomBar,
       trayCardW,
-      stockX: originX + boardW - cardW / 2 - trayCardW * 0.3,
+      // Нижняя карта запаса стоит в stockX, веер уходит от неё влево. На
+      // телефоне поле у края 4 px, и сдвига 0.3 мало: правый край стопки
+      // срезался экраном. Поэтому ещё и потолок «целиком в окне».
+      stockX: Math.min(
+        originX + boardW - cardW / 2 - trayCardW * 0.3,
+        width - trayCardW / 2 - sideMargin,
+      ),
       stockY: trayY,
       foundationX: originX + trayCardW * 0.35,
       foundationY: trayY,
@@ -587,7 +675,21 @@ export class CardTable {
           view.showBack(true)
           view.root.rotation = 0
           view.root.position.set(this.layout.stockX, this.layout.stockY)
-        } else {
+        } else if (
+          // Летящую карту (раздача, ход) не ставим силой: её твин на
+          // следующем кадре увёл бы её обратно к старой цели. На телефоне
+          // окно меняет размер посреди раздачи — полный экран после
+          // «Играть», прячется адресная строка, — и открытые карты садились
+          // по прежней раскладке мимо колонок. Ждущие своей очереди твины
+          // позиции у карт стола бывают только у раздач (dealOut, ряд из
+          // запаса), и стартуют они из угла запаса — его новое место и есть
+          // их новая точка старта.
+          !this.tweener.retarget(
+            view.root,
+            { x: p.x, y: p.y },
+            { x: this.layout.stockX, y: this.layout.stockY },
+          )
+        ) {
           view.snapHome()
         }
       }
@@ -618,7 +720,7 @@ export class CardTable {
     this.stockPile.removeChildren()
     const l = this.layout
     const tw = l.trayCardW
-    const th = tw * CARD_ASPECT
+    const th = tw * l.aspect
 
     const deals = this.game.state.stock.length
     for (let i = 0; i < deals; i++) {
@@ -679,11 +781,15 @@ export class CardTable {
   }
 
   private onPointerDown = (event: FederatedPointerEvent): void => {
+    // Колода взведена и ждёт стартовой раздачи (на Android — пока встанет
+    // полный экран): стопка лежит ровно на месте запаса, и тап по ней тратил
+    // настоящую раздачу, а стартовая потом оставляла лица рубашками.
+    if (this.dealPending) return
     const local = this.root.toLocal(event.global)
 
     // Запас
     const l = this.layout
-    const trayH = l.trayCardW * CARD_ASPECT
+    const trayH = l.trayCardW * l.aspect
     if (
       this.game.state.stock.length > 0 &&
       Math.abs(local.x - l.stockX) < l.trayCardW * 0.9 &&
@@ -726,6 +832,7 @@ export class CardTable {
       cards: views,
       from: hit.column,
       count,
+      pointerId: event.pointerId,
       grabX: local.x - views[0].root.x,
       grabY: local.y - views[0].root.y,
       lastX: local.x,
@@ -784,6 +891,29 @@ export class CardTable {
       }
     }
     this.clearSelection()
+  }
+
+  /**
+   * Касание оборвано без отпускания: карты пружиной возвращаются на место,
+   * хода нет.
+   *
+   * Android шлёт pointercancel вместо pointerup часто: жест «назад» от края
+   * экрана, шторка уведомлений, входящий звонок. Без отмены перетаскиваемая
+   * карта оставалась висеть над столом в слое перетаскивания, а следующий
+   * тап начинал новое перетаскивание поверх неё.
+   */
+  private onPointerCancel = (event?: PointerEvent): void => {
+    const drag = this.drag
+    if (!drag) return
+    if (event && event.pointerId !== drag.pointerId) return
+    this.drag = null
+
+    this.returnToTable(drag)
+    for (const view of drag.cards) {
+      view.setLift(0)
+      view.resetTilt(this.tweener)
+      view.moveHome(this.tweener, { duration: 0.36, spring: true })
+    }
   }
 
   private returnToTable(drag: DragState): void {
@@ -1157,7 +1287,7 @@ export class CardTable {
   private flashStock(): void {
     const l = this.layout
     const tw = l.trayCardW
-    const th = tw * CARD_ASPECT
+    const th = tw * l.aspect
 
     // Запас нарисован веером: карты уходят вверх-влево от stockX/stockY, каждая
     // со сдвигом 0.14*tw по X и 0.06*tw по Y (см. drawStock). Подсвечиваем ВСЮ

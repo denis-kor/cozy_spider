@@ -1,9 +1,9 @@
 import { mountAccount } from './app/account'
+import { mountBackGuard } from './app/backGuard'
 import { mountHud } from './app/hud'
 import { resolvePacks } from './app/packs'
 import { ServerAdapter } from './app/platform/server'
 import { mountRadio } from './app/radio'
-import { mountRotateHint } from './app/rotateHint'
 import { mountShop } from './app/shop'
 import { mountStart } from './app/start'
 import { mountViewport, requestFullscreenIfPossible } from './app/viewport'
@@ -30,11 +30,6 @@ async function main(): Promise<void> {
   const bootBar = boot.querySelector<HTMLElement>('.bar i')!
 
   const stage = new Stage()
-
-  // Телефон в портрете: плашка «поверните» — сразу, поверх заставки. Загрузка
-  // сцены занимает секунды, и подсказка, заведённая после неё, проходила мимо
-  // глаз. Игру не перекрывает, уходит от поворота или тапа.
-  mountRotateHint()
 
   // Потеря WebGL-контекста (на телефоне — обычно нехватка видеопамяти):
   // показать человеку причину, а не немой чёрный экран.
@@ -126,6 +121,43 @@ async function main(): Promise<void> {
   }
 
   mountHud(stage, hud, { onShop: () => shop?.open(), onMenu: () => start?.open() })
+
+  // Стол уступает панели по её фактическому низу: высота HUD зависит от
+  // шрифта (на Android вместо Georgia — более широкий Noto Serif, и ряд
+  // кнопок переносится) и от переносов, а константы раскладки — нет.
+  // Меряем видимые плашки, а не полосу: её нижний padding прозрачен.
+  const hudBar = hud.querySelector<HTMLElement>('.hud-top')
+  if (hudBar && 'ResizeObserver' in window) {
+    const groups = Array.from(hudBar.querySelectorAll<HTMLElement>('.hud-group'))
+    const measure = (): void => {
+      // Широкая раскладка обязана стоять в один ряд, как на iPhone: если
+      // плашки разъехались, ужимаем воздух в кнопках (.hud-tight). Класс
+      // сперва снимаем — проверяем, нужен ли он ещё, на честной ширине.
+      // Снять и поставить в одном колбэке — размер в итоге тот же, и
+      // ResizeObserver не зацикливается.
+      hudBar.classList.remove('hud-tight')
+      const [suits, actions] = groups
+      if (
+        window.innerWidth > 720 &&
+        suits &&
+        actions &&
+        actions.getBoundingClientRect().top >= suits.getBoundingClientRect().bottom - 1
+      ) {
+        hudBar.classList.add('hud-tight')
+      }
+
+      let bottom = 0
+      for (const g of groups) bottom = Math.max(bottom, g.getBoundingClientRect().bottom)
+      stage.table.setTopInset(bottom)
+    }
+    new ResizeObserver(measure).observe(hudBar)
+    // Поздняя подгрузка шрифта меняет ширину кнопок без ресайза окна.
+    void document.fonts?.ready.then(measure)
+  }
+
+  // Свайп от края экрана на телефоне — системное «Назад»: не дать ему увести
+  // со страницы посреди перетаскивания карты из крайней колонки.
+  mountBackGuard()
   // Кнопка «Войти и купить» в лавке закрывает витрину и открывает
   // титульник — там и живёт вход в аккаунт.
   shop = mountShop(hud, platform, { onSignIn: () => start?.open() })
@@ -142,10 +174,13 @@ async function main(): Promise<void> {
     onPlay: () => {
       // «Играть» — это жест: на телефоне/планшете можно уйти в полный экран
       // (где браузер это умеет). На iPhone Safari метода нет — тихо мимо.
-      requestFullscreenIfPossible()
+      const fullscreen = requestFullscreenIfPossible()
       stage.radio?.beginAttract()
-      // Титул уходит — стол открывается стартовой раздачей из угла.
-      stage.table.dealOutIfArmed()
+      // Титул уходит — стол открывается стартовой раздачей из угла. На
+      // Android раздача ждёт, пока полный экран встанет: иначе ресайз
+      // посреди неё пересобирал атлас и обрывал анимацию. На iPhone
+      // промис уже разрешён — раздача идёт сразу, как раньше.
+      void fullscreen.then(() => stage.table.dealOutIfArmed())
     },
   })
   mountRadio(stage)
