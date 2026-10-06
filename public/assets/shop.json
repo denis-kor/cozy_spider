@@ -41,46 +41,6 @@
       ]
     },
     {
-      "id": "pack.kamchatka",
-      "kind": "scene",
-      "title": "Окно на сопку",
-      "desc": "Вечер над Камчаткой: хрущёвка в огнях, кассетник на подоконнике и чёрный котик против заката. Соберёшь пасьянс — сопка проснётся.",
-      "price": 199,
-      "thumb": "/assets/scene/kamchatka/preview.webp",
-      "preview": "/assets/scene/kamchatka/full.webp",
-      "pair": "deck.pond"
-    },
-    {
-      "id": "deck.pond",
-      "kind": "deck",
-      "title": "Пейзажи природы",
-      "desc": "Маленькие пейзажи в дождливой сини. Бесплатно, навсегда.",
-      "price": 0,
-      "deck": "/assets/deck",
-      "fan": [
-        "back",
-        "C13",
-        "H12",
-        "D11",
-        "S13"
-      ],
-      "cards": [
-        "C11",
-        "C12",
-        "C13",
-        "D11",
-        "D12",
-        "D13",
-        "H11",
-        "H12",
-        "H13",
-        "S11",
-        "S12",
-        "S13"
-      ],
-      "preview": "/assets/deck/preview.webp"
-    },
-    {
       "id": "pack.tarot",
       "kind": "scene",
       "title": "Салон таро",
@@ -119,6 +79,59 @@
         "C12"
       ],
       "preview": "/assets/deck-tarot/preview.webp"
+    },
+    {
+      "id": "pack.kamchatka",
+      "kind": "scene",
+      "title": "Окно на сопку",
+      "desc": "Вечер над Камчаткой: хрущёвка в огнях, кассетник на подоконнике и чёрный котик против заката. Соберёшь пасьянс — сопка проснётся.",
+      "price": 199,
+      "thumb": "/assets/scene/kamchatka/preview.webp",
+      "preview": "/assets/scene/kamchatka/full.webp",
+      "pair": "deck.pond"
+    },
+    {
+      "id": "deck.pond",
+      "kind": "deck",
+      "title": "Пейзажи природы",
+      "desc": "Маленькие пейзажи в дождливой сини.",
+      "price": 199,
+      "deck": "/assets/deck",
+      "fan": [
+        "back",
+        "C13",
+        "H12",
+        "D11",
+        "S13"
+      ],
+      "cards": [
+        "C11",
+        "C12",
+        "C13",
+        "D11",
+        "D12",
+        "D13",
+        "H11",
+        "H12",
+        "H13",
+        "S11",
+        "S12",
+        "S13"
+      ],
+      "preview": "/assets/deck/preview.webp"
+    },
+    {
+      "id": "bundle.all",
+      "kind": "bundle",
+      "title": "Всё сразу",
+      "desc": "Обе платные сцены и обе платные колоды одной покупкой, дешевле, чем по отдельности.",
+      "price": 599,
+      "includes": [
+        "pack.tarot",
+        "deck.tarot",
+        "pack.kamchatka",
+        "deck.pond"
+      ]
     }
   ]
 }

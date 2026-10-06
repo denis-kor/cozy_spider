@@ -8,6 +8,12 @@
       "port": 5273
     },
     {
+      "name": "cozy-spider-win-preview",
+      "runtimeExecutable": "C:\\Program Files\\nodejs\\node.exe",
+      "runtimeArgs": ["node_modules/vite/bin/vite.js", "preview", "--port", "5274", "--strictPort"],
+      "port": 5274
+    },
+    {
       "name": "cozy-spider",
       "runtimeExecutable": "/Users/annav/.local/node/bin/node",
       "runtimeArgs": ["node_modules/vite/bin/vite.js"],

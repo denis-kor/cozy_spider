@@ -281,11 +281,13 @@ export function mountStart(
       .syncPurchases()
       .then(({ granted, pending }) => {
         for (const sku of granted) track('purchase_done', { sku })
-        note.textContent = granted.length
-          ? 'Покупка получена — спасибо! Пак ждёт в лавке, кнопка «Применить».'
-          : pending
-            ? 'Оплата ещё обрабатывается — пак появится в лавке через минуту-другую.'
-            : 'Оплата не прошла — деньги не списаны.'
+        note.textContent = granted.some((sku) => sku.startsWith('bundle.'))
+          ? 'Набор получен — спасибо! Сцены и колода ждут в лавке, кнопка «Применить».'
+          : granted.length
+            ? 'Покупка получена — спасибо! Пак ждёт в лавке, кнопка «Применить».'
+            : pending
+              ? 'Оплата ещё обрабатывается — пак появится в лавке через минуту-другую.'
+              : 'Оплата не прошла — деньги не списаны.'
         note.classList.add('start-note-active')
       })
       .catch(() => {

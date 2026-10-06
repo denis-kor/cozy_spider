@@ -14,7 +14,7 @@ import { track } from './track'
 
 interface CatalogSku {
   id: Sku
-  kind: 'scene' | 'deck'
+  kind: 'scene' | 'deck' | 'bundle'
   title: string
   price: number
 }
@@ -89,6 +89,8 @@ export function mountAccount(
       const trialSkus = new Set(adapter.getTrial?.()?.skus ?? [])
       ownedEl.innerHTML = ''
       for (const sku of catalog.skus) {
+        // Набор — не пак, а способ купить: его паки и так в списке.
+        if (sku.kind === 'bundle') continue
         const has = owned.has(sku.id) || sku.price === 0
         const onTrial = trialSkus.has(sku.id)
         // На триале вместо цены — сколько осталось от приветственного часа:

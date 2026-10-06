@@ -30,7 +30,7 @@ export function trialLeft(until?: number): string {
 
 interface CatalogSku {
   id: Sku
-  kind: 'scene' | 'deck'
+  kind: 'scene' | 'deck' | 'bundle'
   title: string
   desc: string
   price: number
@@ -46,6 +46,8 @@ interface CatalogSku {
   preview?: string
   /** Сцена: id парной колоды — в витрине она стоит напротив сцены. */
   pair?: Sku
+  /** Набор: какие паки он открывает. Сервер выдаёт их по отдельности. */
+  includes?: Sku[]
 }
 
 interface Catalog {
@@ -134,6 +136,9 @@ export function mountShop(root: HTMLElement, adapter: PlatformAdapter, hooks: Sh
     const cards = new Map<Sku, HTMLElement>()
 
     for (const sku of catalog.skus) {
+      // Набор рисуется отдельно (bundleCard); здесь только паки.
+      const kind = sku.kind
+      if (kind === 'bundle') continue
       const card = document.createElement('div')
       card.className = 'shop-card'
 
@@ -144,7 +149,7 @@ export function mountShop(root: HTMLElement, adapter: PlatformAdapter, hooks: Sh
       const onTrial = trialSkus.has(sku.id)
       const owns = sku.price === 0 || (owned.has(sku.id) && !onTrial)
       const usable = owns || onTrial
-      const applied = usable && isApplied(sku.kind, sku.id)
+      const applied = usable && isApplied(kind, sku.id)
       const price = sku.price === 0 ? 'бесплатно' : `${sku.price} ${catalog.currency}`
 
       // «Сейчас в игре» — не словом, а тёплым кантом вокруг карточки.
@@ -221,7 +226,7 @@ export function mountShop(root: HTMLElement, adapter: PlatformAdapter, hooks: Sh
         const action = document.createElement('button')
         action.textContent = 'Применить'
         action.onclick = () => {
-          applyPack(sku.kind, sku.id)
+          applyPack(kind, sku.id)
           track('pack_apply', { sku: sku.id })
           // Не перезагружаем: выбор копится в лавке. Перерисовываем состояние
           // (медальон/кант/кнопки переезжают на новый выбор), а реальное
@@ -246,29 +251,7 @@ export function mountShop(root: HTMLElement, adapter: PlatformAdapter, hooks: Sh
           action.className = 'shop-buy'
           action.textContent = 'Купить'
         }
-        action.onclick = async () => {
-          action.disabled = true
-          const result = await adapter.purchase(sku.id)
-          if (result.status === 'unavailable') {
-            // Честный ответ fake-door: намерение записано, денег не взяли.
-            action.textContent = 'Готовится — спасибо!'
-            action.classList.add('shop-noted')
-          } else if (result.status === 'signin-required') {
-            // Покупка живёт в аккаунте — иначе её не перенести на другое
-            // устройство и не вернуть после чистки браузера. Кнопка сама
-            // ведёт ко входу: «идите в меню» тестеры читали как тупик.
-            action.textContent = 'Войти и купить'
-            action.disabled = false
-            action.onclick = () => {
-              close()
-              hooks.onSignIn?.()
-            }
-          } else if (result.status === 'ok') {
-            action.textContent = 'В игре'
-          } else {
-            action.disabled = false
-          }
-        }
+        wireBuy(action, sku.id)
         actions.appendChild(action)
       }
       // Куплен и в игре → без кнопок: активность показывают кант и медальон.
@@ -279,6 +262,7 @@ export function mountShop(root: HTMLElement, adapter: PlatformAdapter, hooks: Sh
     // Витрина рядами: сцена слева, её парная колода (`pair`) напротив, в
     // одном ряду сетки — поэтому пара стоит ровно напротив при любой высоте
     // карточек. Колоды без пары досыпаются в конец правой колонкой.
+    // Порядок рядов — порядок сцен в shop.json.
     const head = (text: string): HTMLElement => {
       const h = document.createElement('h3')
       h.className = 'shop-col-head'
@@ -301,6 +285,94 @@ export function mountShop(root: HTMLElement, adapter: PlatformAdapter, hooks: Sh
     for (const deck of catalog.skus.filter((s) => s.kind === 'deck' && !placed.has(s.id))) {
       list.append(gap(), cards.get(deck.id)!)
     }
+
+    // Набор — последним, после всех паков: игрок сначала видит, что внутри.
+    const bundles = catalog.skus
+      .filter((s) => s.kind === 'bundle')
+      .map((s) => bundleCard(s, catalog!))
+      .filter((c): c is HTMLElement => c !== null)
+    list.append(...bundles)
+  }
+
+  /** «Купить» и её исходы — общие для пака и набора. */
+  function wireBuy(action: HTMLButtonElement, sku: Sku): void {
+    action.onclick = async () => {
+      action.disabled = true
+      const result = await adapter.purchase(sku)
+      if (result.status === 'unavailable') {
+        // Честный ответ fake-door: намерение записано, денег не взяли.
+        action.textContent = 'Готовится — спасибо!'
+        action.classList.add('shop-noted')
+      } else if (result.status === 'signin-required') {
+        // Покупка живёт в аккаунте — иначе её не перенести на другое
+        // устройство и не вернуть после чистки браузера. Кнопка сама
+        // ведёт ко входу: «идите в меню» тестеры читали как тупик.
+        action.textContent = 'Войти и купить'
+        action.disabled = false
+        action.onclick = () => {
+          close()
+          hooks.onSignIn?.()
+        }
+      } else if (result.status === 'ok') {
+        action.textContent = 'В игре'
+      } else {
+        action.disabled = false
+      }
+    }
+  }
+
+  /**
+   * Набор — во всю ширину под рядами, в миниатюре его паки плитками.
+   * Виден, только пока ни один пак из него не куплен: купившему часть
+   * набор вышел бы дороже остатка по отдельности (то же правило держит
+   * сервер). Триал не в счёт — на нём пак не куплен.
+   */
+  function bundleCard(sku: CatalogSku, cat: Catalog): HTMLElement | null {
+    const parts = (sku.includes ?? [])
+      .map((id) => cat.skus.find((s) => s.id === id))
+      .filter((s): s is CatalogSku => s !== undefined)
+    if (!parts.length || parts.some((p) => owned.has(p.id) && !trialSkus.has(p.id))) return null
+    const full = parts.reduce((sum, p) => sum + p.price, 0)
+
+    const card = document.createElement('div')
+    card.className = 'shop-card shop-bundle'
+    card.innerHTML = `
+      <div class="shop-thumb shop-bundle-thumb" data-thumb></div>
+      <div class="shop-body">
+        <b>${sku.title}</b>
+        <span class="shop-bundle-parts">${parts.map((p) => p.title).join(' · ')}</span>
+        <div class="shop-actions" data-actions></div>
+      </div>
+    `
+    const thumb = card.querySelector('[data-thumb]') as HTMLElement
+    for (const p of parts) {
+      const tile = document.createElement('div')
+      tile.className = 'shop-bundle-tile'
+      if (p.kind === 'scene' && p.thumb) {
+        const img = document.createElement('img')
+        img.className = 'shop-scene'
+        img.src = p.thumb
+        img.alt = ''
+        tile.appendChild(img)
+      } else if (p.kind === 'deck' && p.deck && p.fan) {
+        const fan = document.createElement('div')
+        fan.className = 'shop-fan'
+        buildFan(fan, p.deck, p.fan.slice(0, 3))
+        tile.appendChild(fan)
+      }
+      thumb.appendChild(tile)
+    }
+    const tag = document.createElement('span')
+    tag.className = 'shop-pricetag'
+    tag.innerHTML = `<s>${full}</s> ${sku.price} ${cat.currency}`
+    thumb.appendChild(tag)
+
+    const action = document.createElement('button')
+    action.className = 'shop-buy'
+    action.textContent = 'Купить'
+    wireBuy(action, sku.id)
+    ;(card.querySelector('[data-actions]') as HTMLElement).appendChild(action)
+    return card
   }
 
   // Лайтбокс поверх лавки (z-index 50 в index.html, над лавкой и титульником).

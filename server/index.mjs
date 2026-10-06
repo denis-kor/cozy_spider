@@ -36,7 +36,7 @@ const VK_APP_ID = 54746677
 const SESSION_DAYS = 180
 const MAX_BODY = 256 * 1024
 const MAX_AVATAR = 160 * 1024
-const FREE_SKUS = ['pack.pond', 'deck.pond', 'deck.frogs']
+const FREE_SKUS = ['pack.pond', 'deck.frogs']
 /**
  * Приветственный триал: первый ЧАС у нового аккаунта открыт «Салон таро» —
  * сцена и колода. Это НЕ покупка: в таблицу entitlements ничего не пишется,
@@ -302,10 +302,13 @@ async function verifyProviderToken(provider, accessToken) {
 
 // ---------------------------------------------------------------- ЮKassa
 
-/** Товар из каталога. Читается с диска на каждую покупку: покупки редки,
- *  зато цена всегда та, что видит игрок, и деплой фронта ничего не ломает. */
-function catalogSku(sku) {
-  const catalog = JSON.parse(readFileSync(CATALOG_PATH, 'utf8'))
+/** Каталог читается с диска на каждую покупку: покупки редки, зато цена
+ *  всегда та, что видит игрок, и деплой фронта ничего не ломает. */
+function readCatalog() {
+  return JSON.parse(readFileSync(CATALOG_PATH, 'utf8'))
+}
+
+function catalogSku(sku, catalog = readCatalog()) {
   return catalog.skus.find((s) => s.id === sku) ?? null
 }
 
@@ -326,12 +329,20 @@ async function ykFetch(method, path, body, idemKey) {
 }
 
 /** Финал платежа. Идемпотентно: повторный вебхук или гонка с /sync
- *  упираются в PRIMARY KEY энтайтлментов и ничего не портят. */
+ *  упираются в PRIMARY KEY энтайтлментов и ничего не портят.
+ *
+ *  Набор (`includes` в каталоге) раскладывается на паки здесь же, по
+ *  составу на момент оплаты: «Всё сразу» — текущие паки, не будущие.
+ *  Каталог читается ДО записи: не прочитался — статус платежа не тронут,
+ *  вебхук придёт повторно, /sync перепроверит. */
 function settlePayment(id, status) {
-  db.prepare('UPDATE payments SET status = ?, updated_at = ? WHERE id = ?').run(status, now(), id)
-  if (status !== 'succeeded') return
   const p = db.prepare('SELECT user_id, sku FROM payments WHERE id = ?').get(id)
-  db.prepare('INSERT OR IGNORE INTO entitlements (user_id, sku) VALUES (?, ?)').run(p.user_id, p.sku)
+  const grant = status === 'succeeded' ? [p.sku, ...(catalogSku(p.sku)?.includes ?? [])] : []
+  db.transaction(() => {
+    db.prepare('UPDATE payments SET status = ?, updated_at = ? WHERE id = ?').run(status, now(), id)
+    const insert = db.prepare('INSERT OR IGNORE INTO entitlements (user_id, sku) VALUES (?, ?)')
+    for (const sku of grant) insert.run(p.user_id, sku)
+  })()
 }
 
 // ----------------------------------------------------------------- ручки
@@ -527,10 +538,23 @@ const routes = {
     if (!u) return json(res, 401, { error: 'Нужен вход' })
     if (!ykEnabled) return json(res, 503, { error: 'Оплата ещё не подключена' })
     if (rateLimited(clientIp(req))) return json(res, 429, { error: 'Слишком много попыток — позже' })
-    const sku = catalogSku(String(body.sku ?? ''))
+    const catalog = readCatalog()
+    const sku = catalogSku(String(body.sku ?? ''), catalog)
     if (!sku || !(sku.price > 0)) return json(res, 400, { error: 'Нет такого товара' })
     if (db.prepare('SELECT 1 FROM entitlements WHERE user_id = ? AND sku = ?').get(u.id, sku.id))
       return json(res, 409, { error: 'Уже куплено' })
+    if (sku.includes) {
+      // Набор продаётся, только пока он дешевле остатка по отдельности:
+      // иначе игрок, уже купивший часть паков, переплатил бы за своё.
+      // Лавка такой набор не показывает — это страховка от старой вкладки.
+      const owned = new Set(
+        db.prepare('SELECT sku FROM entitlements WHERE user_id = ?').all(u.id).map((r) => r.sku),
+      )
+      const rest = sku.includes.filter((id) => !owned.has(id))
+      const restPrice = rest.reduce((sum, id) => sum + (catalogSku(id, catalog)?.price ?? 0), 0)
+      if (!rest.length) return json(res, 409, { error: 'Уже куплено' })
+      if (restPrice <= sku.price) return json(res, 409, { error: 'Остальное дешевле взять по отдельности' })
+    }
     const payment = await ykFetch(
       'POST',
       '/payments',

@@ -404,6 +404,16 @@
       /* Триал: вместо ценника — тихая подпись-подарок, тёплая зелень
          вместо золота цены. Без таймера. */
       .shop-pricetag.shop-price-trial { color: #a9c7b2; font-size: 12px; letter-spacing: 0.02em; }
+      /* Набор: во всю ширину над рядами, в миниатюре его паки плитками,
+         на ценнике зачёркнута сумма по отдельности. */
+      .shop-bundle { grid-column: 1 / -1; }
+      .shop-bundle-thumb { display: flex; gap: 2px; height: 140px; }
+      /* isolation: z-index карт веера остаётся внутри плитки, иначе на узком
+         экране соседний веер ложится поверх ценника набора. */
+      .shop-bundle-tile { position: relative; flex: 1; min-width: 0; overflow: hidden; isolation: isolate; }
+      .shop-bundle-tile .shop-fan img { width: 56px; }
+      .shop-bundle-parts { font-size: 13px; color: var(--ink-dim); }
+      .shop-pricetag s { opacity: 0.55; margin-right: 4px; }
       .shop-card .shop-noted { opacity: 1; color: #a9c7b2; }
       /* «Оставить · цена» на триале: тихая вторичная кнопка рядом с «Применить».
          Пак и так открыт сегодня — путь купить виден, но не давит. Живёт в
